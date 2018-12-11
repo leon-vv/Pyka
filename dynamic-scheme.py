@@ -12,8 +12,18 @@ ParserResult = List[Tuple[T, int]]
 Parser = Callable[[str, int], ParserResult[T]]
 
 
+# Helpfull predicates (T -> bool)
+
+def valid_int_char(c: str) -> bool:
+    return '0' <= c <= '9'
+
 def valid_float_char(c: str) -> bool:
-    return '0' <= c <= '9' or c in "+-e"
+    return valid_int_char(c) or c in "+-e."
+
+def is_whitespace(s: str) -> bool:
+    return s == ' ' or s == '\t' or s == '\r' or s =='\n'
+
+# Generic parser combinators
 
 def any_parser(*parsers: Parser[T]) -> Parser[T]:
 
@@ -67,14 +77,14 @@ def filter_char_parser(f: Callable[[str], bool]) -> Parser[str]:
         else: return []
     return parser
 
-# 'convert' is allowed to throw ValueError
-def parser_from_characters(f: Callable[[str], bool], 
+def exception_filter_char_parser(f: Callable[[str], bool], 
                            convert: Callable[[str], T]) -> Parser[T]:
     
     return map_parser_exception(lambda s: convert(s), filter_char_parser(f))
 
-def pattern_parser(pattern: str) -> Parser[str]:
 
+def pattern_parser(pattern: str) -> Parser[str]:
+    
     def parser(s: str, p: int):
         if (s[p:]).startswith(pattern):
             return [(pattern, p + len(pattern))]
@@ -89,21 +99,25 @@ def except_parser(char: str) -> Parser[str]:
         elif pos < len(s): return [(s[pos], pos + 1)]
     return parser
 
-def chain_parsers(*parsers: Parser[str]) -> Parser[str]:
 
+
+def reduce_with_parsers(
+        combine: Callable[[J, T], J],
+        initial: J,
+        *parsers: Parser[T]) -> Parser[J]:
+
+    def new_state(state: J, new_results: ParserResult[T]) -> ParserResult[J]:
+        return list(map(lambda r: ( combine(state, r[0]), r[1] ),
+                        new_results))
+    
     def parser(s: str, pos: int):
-
-        res = parsers[0](s, pos)
-        
-        for p in parsers[1:]:
-            new_res: List[Tuple[str, int]] = []
-
+        res = [(initial, pos)]
+          
+        for p in parsers:
+            new_res: ParserResult[J] = []
+            
             for r in res:
-                p = map_parser(
-                        lambda s: r[0] + s,
-                        p)
-                
-                new_res.extend(p(s, r[1]))
+                new_res.extend(new_state(r[0], p(s, r[1])))
             
             res = new_res
          
@@ -111,22 +125,41 @@ def chain_parsers(*parsers: Parser[str]) -> Parser[str]:
 
     return parser
 
+def copy_list_and_append(lst: List[T], val: T) -> List[T]:
+    copy = lst.copy()
+    copy.append(val)
+    return copy
 
-def prepend(s: str, r: ParserResult[str]) -> ParserResult[str]:
-    return list(map(lambda r: (s + r[0], r[1]), r))
+def join_strings(lst) -> str:
+    return ''.join(lst)
 
-def repeat_parser(p: Parser[str]) -> Parser[str]:
+def chain_string_parsers(*parsers: Parser[str]) -> Parser[str]:
+    cpy: Callable[[List[str], str], List[str]] = copy_list_and_append
+
+    list_parser: Parser[List[str]] = reduce_with_parsers(
+        cpy,
+        [],
+        *parsers)
     
+    return map_parser(join_strings, list_parser)
+
+def repeat_parser(p: Parser[T]) -> Parser[List[T]]:
+ 
+    def extend_from_list(lst: List[T], res: ParserResult[T]):
+        def to_map(r):
+            return ( copy_list_and_append(lst, r[0]), r[1] ) 
+        return map(to_map, res)
+
     def parser(s: str, pos: int):
-        res = p(s, pos)
-        
+        res: ParserResult[List[T]] = extend_from_list([], p(s, pos))
+         
         while True:
-            new_res = []
+            new_res: ParserResult[List[T]] = []
             
             for r in res:
-                to_extend = p(s, r[1])
-                to_extend = prepend(r[0], to_extend)
-                new_res.extend(to_extend)
+                parser_result = p(s, r[1])
+                result_with_lists = extend_from_list(r[0], parser_result)
+                new_res.extend(result_with_lists)
         
             if len(new_res): res = new_res
             else: break
@@ -166,6 +199,12 @@ def debug_parser(p: Parser[T]) -> Parser[T]:
     
     return parser
 
+def ignore_parser(p: Parser[str]) -> Parser[str]:
+    return map_parser(lambda r: "", p)
+
+def join_strings_parser(p: Parser[List[str]]) -> Parser[str]:
+    return map_parser(join_strings, p)
+
 escape_control_parser = any_parser(
     set_value(pattern_parser("\\a"), "\a"),
     set_value(pattern_parser("\\b"), "\b"),
@@ -176,19 +215,30 @@ escape_control_parser = any_parser(
     set_value(pattern_parser("\\\\"), "\\"),
     set_value(pattern_parser("\|"), "|"))
 
-# Recursive types not yet supported
+# Now the parsers for the Scheme subset
+
+# Recursive types not yet supported by MyPy, therefore
+# we need to use Any.
+# The list type of Scheme is represented in reverse,
+# so the first element in the Scheme list will be the
+# last element in our Python list. This way we can support
+# constant time prepend.
 Ast = Union[int, float, str, List[Any]]
 
 string_parser: Parser[Ast] = cast(Parser[Ast],
-    chain_parsers(
+    chain_string_parsers(
         pattern_parser("\""),
-        repeat_parser(
-            if_else_parser(escape_control_parser,
-                           except_parser("\""))),
+        join_strings_parser(
+            repeat_parser(
+                if_else_parser(escape_control_parser,
+                            except_parser("\"")))),
         pattern_parser("\"")))
 
-float_parser: Parser[Ast] = parser_from_characters(valid_float_char, float)
-int_parser: Parser[Ast] = parser_from_characters(lambda c: '0' <= c <= '9', int)
+whitespace_parser = filter_char_parser(is_whitespace)
+
+
+float_parser: Parser[Ast] = exception_filter_char_parser(valid_float_char, float)
+int_parser: Parser[Ast] = exception_filter_char_parser(valid_int_char, int)
 
 
 def eval(e: str) -> ParserResult[Ast]:
