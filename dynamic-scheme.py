@@ -1,4 +1,4 @@
-from typing import cast, TypeVar, List, Tuple, Callable, Union, Any
+from typing import Iterable, cast, TypeVar, List, Tuple, Callable, Union, Any
 
 # A parser is a function which:
 # Accepts a string and a starting position.
@@ -12,7 +12,7 @@ ParserResult = List[Tuple[T, int]]
 Parser = Callable[[str, int], ParserResult[T]]
 
 
-# Helpfull predicates (T -> bool)
+# Helpful predicates (T -> bool)
 
 def valid_int_char(c: str) -> bool:
     return '0' <= c <= '9'
@@ -22,6 +22,11 @@ def valid_float_char(c: str) -> bool:
 
 def is_whitespace(s: str) -> bool:
     return s == ' ' or s == '\t' or s == '\r' or s =='\n'
+
+# Small utility functions
+
+def join_strings(lst) -> str:
+    return ''.join(lst)
 
 # Generic parser combinators
 
@@ -100,16 +105,41 @@ def except_parser(char: str) -> Parser[str]:
     return parser
 
 
+# Used in reduce_with_parser(s)
+def new_state(combine: Callable[[J, T], J],
+              state: J,
+              new_results: ParserResult[T]) -> Iterable[Tuple[J, int]]:
+    return map(lambda r: ( combine(state, r[0]), r[1] ),
+               new_results)
+ 
+def reduce_with_parser(
+        combine: Callable[[J, T], J],
+        initial: J,
+        p: Parser[T]) -> Parser[J]:
+
+    def parser(s: str, pos: int):
+        res = [(initial, pos)]
+         
+        while True:
+            new_res: ParserResult[J] = []
+            
+            for r in res:
+                parser_result = p(s, r[1])
+                new_res.extend(new_state(combine, r[0], parser_result))
+             
+            if len(new_res): res = new_res
+            else: break
+        
+        return res
+    
+    return parser
+
 
 def reduce_with_parsers(
         combine: Callable[[J, T], J],
         initial: J,
         *parsers: Parser[T]) -> Parser[J]:
 
-    def new_state(state: J, new_results: ParserResult[T]) -> ParserResult[J]:
-        return list(map(lambda r: ( combine(state, r[0]), r[1] ),
-                        new_results))
-    
     def parser(s: str, pos: int):
         res = [(initial, pos)]
           
@@ -117,7 +147,7 @@ def reduce_with_parsers(
             new_res: ParserResult[J] = []
             
             for r in res:
-                new_res.extend(new_state(r[0], p(s, r[1])))
+                new_res.extend(new_state(combine, r[0], p(s, r[1])))
             
             res = new_res
          
@@ -125,13 +155,15 @@ def reduce_with_parsers(
 
     return parser
 
+def repeat_str_parser(p: Parser[str]) -> Parser[str]:
+    lst_parser = reduce_with_parser(
+        copy_and_ 
+
+
 def copy_list_and_append(lst: List[T], val: T) -> List[T]:
     copy = lst.copy()
     copy.append(val)
     return copy
-
-def join_strings(lst) -> str:
-    return ''.join(lst)
 
 def chain_string_parsers(*parsers: Parser[str]) -> Parser[str]:
     cpy: Callable[[List[str], str], List[str]] = copy_list_and_append
@@ -143,32 +175,6 @@ def chain_string_parsers(*parsers: Parser[str]) -> Parser[str]:
     
     return map_parser(join_strings, list_parser)
 
-def repeat_parser(p: Parser[T]) -> Parser[List[T]]:
- 
-    def extend_from_list(lst: List[T], res: ParserResult[T]):
-        def to_map(r):
-            return ( copy_list_and_append(lst, r[0]), r[1] ) 
-        return map(to_map, res)
-
-    def parser(s: str, pos: int):
-        res: ParserResult[List[T]] = extend_from_list([], p(s, pos))
-         
-        while True:
-            new_res: ParserResult[List[T]] = []
-            
-            for r in res:
-                parser_result = p(s, r[1])
-                result_with_lists = extend_from_list(r[0], parser_result)
-                new_res.extend(result_with_lists)
-        
-            if len(new_res): res = new_res
-            else: break
-        
-        return res
-    
-    return parser
-
-    
 # Try the first parser, if it fails, try the second
 def if_else_parser(p1: Parser[T], p2: Parser[T]) -> Parser[T]:
 
@@ -181,6 +187,9 @@ def if_else_parser(p1: Parser[T], p2: Parser[T]) -> Parser[T]:
 
 def set_value(p: Parser[T], v: J) -> Parser[J]:
     return map_parser(lambda r: v, p)
+
+def set_empty_list(p: Parser[T]) -> Parser[List[T]]:
+    return set_value(p, [])
 
 def whatever_parser(s: str, pos: int) -> ParserResult[str]:
     if(pos < len(s)): return [(s[pos], pos + 1)]
@@ -198,9 +207,6 @@ def debug_parser(p: Parser[T]) -> Parser[T]:
         return r
     
     return parser
-
-def ignore_parser(p: Parser[str]) -> Parser[str]:
-    return map_parser(lambda r: "", p)
 
 def join_strings_parser(p: Parser[List[str]]) -> Parser[str]:
     return map_parser(join_strings, p)
