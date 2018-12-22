@@ -4,6 +4,8 @@ import operator as op
 
 from parsec import *
 
+################### Data types (symbol, function, macro)
+
 class Symbol:
     def __init__(self, s):
         self.str = s
@@ -17,6 +19,53 @@ class Symbol:
     def __repr__(self):
         return self.__str__()
 
+
+class BuiltinFunction:
+    def __init__(self, fn):
+        self.fn = fn
+    def __call__(self, env, *args):
+        return self.fn(*[eval(env, a) for a in args]) 
+
+# Dynamically scoped function
+class DynFunction:
+    def __init__(self, params, body):
+        self.params, self.body = params, body
+    def __call__(self, env, *args):
+        dct = dict(zip(self.params, [eval(self, a) for a in args]))
+        env.append(dct)
+        res = eval(env, self.body)
+        env.pop()
+        return res
+
+# Dynamically scoped F expression
+class Fexpr:
+    def __init__(self, params, body):
+        self.params, self.body = params, body
+    def __call__(self, env, *args):
+        dct = dict(zip(self.params, args))
+        env.append(dct)
+        res = eval(env, body)
+        env.pop()
+        return res
+
+# Special forms
+def env_ref(env, nth):
+    return env.get_reference(eval(env, nth))
+
+def eval_(env, expr, env_expr):
+    return eval(eval(env, expr), eval(env, env_expr))
+
+def fexpr(env, params, body):
+    return Fexpr([p.str for p in params], body)
+
+def dyn_lambda(env, params, body):
+    return DynFunction([p.str for p in params], body)
+
+def define(env, var, value):
+    env[-1][var.str] = eval(env, value)
+ 
+#################### Parsers
+
 # ignore cases.
 @generate
 def comment():
@@ -29,7 +78,6 @@ ignore = comment ^ spaces()
 
 lparen = string('(')
 rparen = string(')')
-
 
 def escaped_char_parser(char, res):
     return string('\\' + char).result(res)
@@ -73,12 +121,9 @@ symbol = (one_of('+-') ^ normal_identifier ^ peculiar_identifier).parsecmap(Symb
 
 escaped_or_char = escaped_char ^ none_of('"')
 
-def list_to_string(lst):
-    return ''.join(lst)
-
-# Very inefficient, maybe optimize later
+# Inefficient, maybe optimize later
 string_ = (string('"') >> many(escaped_or_char) << string('"')) \
-        .parsecmap(list_to_string)
+        .parsecmap(lambda lst: ''.join(lst))
 
 boolean = (string('#true') ^ string('#t')).result(True) ^ \
             (string('#false') ^ string('#f')).result(False)
@@ -104,30 +149,118 @@ def abbreviation():
 compound_datum = list_ ^ abbreviation
 datum = simple_datum ^ compound_datum
 
+
 # With help of http://norvig.com/lispy.html
-def standard_env():
-    return {
-        '+':op.add, '-':op.sub, '*':op.mul,
-        '>':op.gt, '<':op.lt, '>=':op.ge, '<=':op.le, '=':op.eq,
-    }
 
-global_env = standard_env()
+###################### Environment
 
-def eval(expr: str, env):
+# First some terminology:
+# A dictionary in Python is a mapping from strings
+# to values. An environment is a collection of these
+# dictionaries. The dictionaries in an environment
+# holds only valid Scheme types as values. The keys
+# are normal Python strings but correspond to symbols
+# in the interpreted Scheme language.
+
+# We need a collection type which can do the following
+# operations very fast:
+# - Iterate in reverse over the environment
+# - Make a reference to the environment... Note:
+#   - the collection of dictionaries should be immutable
+#     when pointed by such a reference
+#   - the dictionaries itself can still be changed, the
+#     reference should expose these changes
+# - Add a dictionary to the end of the environment, while
+#   making sure the current references satisfy the above constraints.
+# - Remove a dictionary at the end of the environment, while
+#   making sure the current references satisfy the above constraints.
+
+# The easiest (but probably not the most performant) way
+# of implementing this is to use a list as an environment.
+# Every time we make a reference we simply copy this list.
+
+class Environment(list):
+
+    def __init__(self, lst=None):
+        if lst == None:
+            super(Environment, self).__init__([{
+                '+': BuiltinFunction(op.add),
+                '-': BuiltinFunction(op.sub),
+                '*': BuiltinFunction(op.mul),
+                '>': BuiltinFunction(op.gt),
+                '<': BuiltinFunction(op.lt),
+                '>=': BuiltinFunction(op.ge),
+                '<=': BuiltinFunction(op.le),
+                '=': BuiltinFunction(op.eq),
+                'env-ref': env_ref,
+                'eval': eval_,
+                'fexpr': fexpr,
+                'dyn-lambda': dyn_lambda,
+                'define': define
+            }])
+        else: 
+            super(Environment, self).__init__(lst)
+    
+    def value_of_symbol(self, symbol):
+        key = symbol.str
+        i = len(self) - 1
+        while i >= 0:
+            val = self[i].get(key)
+            if val != None:
+                return val
+            i -= 1
+        
+        raise ValueException('Key %s could not be found in environment' % key)
+     
+    def __str__(self):
+        keys = str(list(self[-1].keys()))
+        return 'Env{' + str(len(self)) + ', ' + keys + '}'
+    
+    # Make a reference to the environment
+    # chain. The reference starts nth dictionaries
+    # back.
+    def get_reference(self, nth_float):
+        nth = int(nth_float)
+        l = len(self)
+        if nth < l:
+            return Environment(self[0:l-nth])
+        else:
+            raise IndexError('Cannot make reference to environment: \
+                    %d is out of range of environment' % nth)
+    
+global_env = Environment()
+
+def eval(env, expr):
     if isinstance(expr, Symbol):
-        return env[expr.str]
-    elif not isinstance(expr, list):
-        return expr
+        return env.value_of_symbol(expr)
+    elif not isinstance(expr, list): # Constant literal
+        return expr 
+    elif isinstance(expr[0], Symbol):
+        stack_trace.append(expr[0].str)
+        res = eval(env, expr[0])(env, *expr[1:])
+        stack_trace.pop()
+        return res
     else:
-        proc = eval(expr[0], env)
-        args = [eval(arg, env) for arg in expr[1:]]
-        return proc(*args)
+        return eval(env, expr[0])(env, *expr[1:])
+
+stack_trace = []
+def eval_stack_trace(env, expr):
+    try:
+        return eval(env, expr)
+    except:
+        print("Stack trace: ", stack_trace)
+        raise
+
+def eval_string(env, str_):
+    return eval_stack_trace(env, datum.parse_strict(str_))
 
 if __name__ == '__main__':
     while True:
+        stack_trace = []
         i = input("> ")
         print("Input: \t\t", i.__repr__())
         expr = datum.parse_strict(i)
         print("Parsed: \t", expr)
-        print("Evaluated: \t", eval(expr, global_env))
+        print("Evaluated: \t", eval_stack_trace(global_env, expr))
+
 

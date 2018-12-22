@@ -6,7 +6,7 @@ sys.path.append('./src/')
 from dyn_scheme import *
 
 
-class ParserTest(unittest.TestCase):
+class SchemeTest(unittest.TestCase):
 
     def parser_test(self, parser, str_, val):
         self.assertEqual(parser.parse_strict(str_), val)
@@ -37,6 +37,13 @@ class ParserTest(unittest.TestCase):
         self.parser_test(abbreviation,
                 "'(some \"list\")",
                 [Symbol('quote'), [Symbol('some'), 'list']])
+
+    def test_plus(self):
+        self.assertEqual(eval_string(global_env, '(+ 10 20)'), 30)
+
+    def test_dyn_lambda(self):
+        self.assertEqual(
+                eval_string(global_env, '((dyn-lambda (x) (+ x x)) 10)'), 20)
 
 if __name__ == '__main__':
     unittest.main()
