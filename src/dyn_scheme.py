@@ -1,17 +1,24 @@
 import re
+import sys
 import math
+import pprint
 import operator as op
 
 from parsec import *
 
-################### Data types (symbol, function, macro)
+DEBUG = False
+
+################### Data types (symbol, function, fexpression)
 
 class Symbol:
     def __init__(self, s):
         self.str = s
 
     def __eq__(self, other):
-        return self.str == other.str
+        if(isinstance(other, Symbol)):
+            return self.str == other.str
+        else:
+            return False
 
     def __str__(self):
         return ('#{%s}' % self.str)
@@ -44,7 +51,7 @@ class Fexpr:
     def __call__(self, env, *args):
         dct = dict(zip(self.params, args))
         env.append(dct)
-        res = eval(env, body)
+        res = eval(env, self.body)
         env.pop()
         return res
 
@@ -53,7 +60,7 @@ def env_ref(env, nth):
     return env.get_reference(eval(env, nth))
 
 def eval_(env, expr, env_expr):
-    return eval(eval(env, expr), eval(env, env_expr))
+    return eval(eval(env, env_expr), eval(env, expr))
 
 def fexpr(env, params, body):
     return Fexpr([p.str for p in params], body)
@@ -63,7 +70,7 @@ def dyn_lambda(env, params, body):
 
 def define(env, var, value):
     env[-1][var.str] = eval(env, value)
- 
+
 #################### Parsers
 
 # ignore cases.
@@ -148,7 +155,7 @@ def abbreviation():
 
 compound_datum = list_ ^ abbreviation
 datum = simple_datum ^ compound_datum
-
+datums = many(ignore >> datum << ignore)
 
 # With help of http://norvig.com/lispy.html
 
@@ -192,6 +199,7 @@ class Environment(list):
                 '>=': BuiltinFunction(op.ge),
                 '<=': BuiltinFunction(op.le),
                 '=': BuiltinFunction(op.eq),
+                'write': BuiltinFunction(print),
                 'env-ref': env_ref,
                 'eval': eval_,
                 'fexpr': fexpr,
@@ -210,7 +218,7 @@ class Environment(list):
                 return val
             i -= 1
         
-        raise ValueException('Key %s could not be found in environment' % key)
+        raise ValueError('Key %s could not be found in environment' % key)
      
     def __str__(self):
         keys = str(list(self[-1].keys()))
@@ -231,36 +239,63 @@ class Environment(list):
 global_env = Environment()
 
 def eval(env, expr):
+    res = None
+
     if isinstance(expr, Symbol):
-        return env.value_of_symbol(expr)
+        res = env.value_of_symbol(expr)
     elif not isinstance(expr, list): # Constant literal
-        return expr 
+        res = expr 
     elif isinstance(expr[0], Symbol):
         stack_trace.append(expr[0].str)
         res = eval(env, expr[0])(env, *expr[1:])
         stack_trace.pop()
-        return res
     else:
-        return eval(env, expr[0])(env, *expr[1:])
+        fn = eval(env, expr[0])
+        stack_trace.append(fn)
+        res = fn(env, *expr[1:])
+        stack_trace.pop()
+
+    if(DEBUG and expr != res):
+        print("==============================================")
+        print('Evaluated: ', expr)
+        print('Result: ', res)
+        print("==============================================")
+
+    return res
+
 
 stack_trace = []
+def print_stack_trace():
+    print("=================Stack trace==================")
+    pprint.PrettyPrinter(indent=4).pprint(stack_trace)
+    print("==============================================")
+
 def eval_stack_trace(env, expr):
     try:
         return eval(env, expr)
     except:
-        print("Stack trace: ", stack_trace)
+        print_stack_trace()
         raise
 
 def eval_string(env, str_):
     return eval_stack_trace(env, datum.parse_strict(str_))
 
 if __name__ == '__main__':
-    while True:
-        stack_trace = []
-        i = input("> ")
-        print("Input: \t\t", i.__repr__())
-        expr = datum.parse_strict(i)
-        print("Parsed: \t", expr)
-        print("Evaluated: \t", eval_stack_trace(global_env, expr))
+    if len(sys.argv) > 1:
+        file = sys.argv[1]
+        with open(file, 'r') as fd:
+            content = fd.read()
+            exprs = datums.parse_strict(content)
+            for e in exprs:
+                eval_stack_trace(global_env, e)
+    else: # REPL
+        print('No file supplied, starting REPL')
+        while True:
+            stack_trace = []
+            i = input("> ")
+            print("Input: \t\t", i.__repr__())
+            expr = datum.parse_strict(i)
+            print("Parsed: \t", expr)
+            print("Evaluated: \t", eval_stack_trace(global_env, expr))
 
 
