@@ -3,8 +3,7 @@ import sys
 
 sys.path.append('./src/')
 
-from dyn_scheme import *
-
+from bootstrap import *
 
 class SchemeTest(unittest.TestCase):
 
@@ -37,14 +36,19 @@ class SchemeTest(unittest.TestCase):
         self.parser_test(abbreviation,
                 "'(some \"list\")",
                 [Symbol('quote'), [Symbol('some'), 'list']])
+    
+    def eval_test(self, code, result):
+        self.assertEqual(eval_string(global_env, code), result)
 
     def test_plus(self):
-        self.assertEqual(eval_string(global_env, '(+ 10 20)'), 30)
+        self.eval_test('(+ 10 20)', 30)
 
     def test_dyn_lambda(self):
-        self.assertEqual(
-                eval_string(global_env, '((dyn-lambda (x) (+ x x)) 10)'), 20)
+        self.eval_test('((dyn-lambda (x) (+ x x)) 10)', 20)
 
+    def test_vararg(self):
+        self.eval_test('((dyn-lambda x x) 1 2)', [1, 2])
+ 
 if __name__ == '__main__':
     unittest.main()
 

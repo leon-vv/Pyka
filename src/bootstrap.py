@@ -26,20 +26,28 @@ class Symbol:
     def __repr__(self):
         return self.__str__()
 
-
+# 'p_env' is the environment in which the
+# arguments should be evaluated
 class BuiltinFunction:
     def __init__(self, fn):
         self.fn = fn
-    def __call__(self, env, *args):
-        return self.fn(*[eval(env, a) for a in args]) 
+    def __call__(self, env, p_env, *args):
+        return self.fn(*[eval(p_env, a) for a in args]) 
 
 # Dynamically scoped function
 class DynFunction:
     def __init__(self, params, body):
         self.params, self.body = params, body
-    def __call__(self, env, *args):
-        dct = dict(zip(self.params, [eval(self, a) for a in args]))
-        env.append(dct)
+    def __call__(self, env, p_env, *args):
+        
+        if isinstance(self.params, list):
+            dct = dict(zip(self.params, [eval(p_env, a) for a in args]))
+            env.append(dct)
+        elif isinstance(self.params, Symbol):
+            env.append({self.params.str: [eval(p_env, a) for a in args]})
+        else:
+            raise ValueError('Fexpr: unknown parameter type')
+        
         res = eval(env, self.body)
         env.pop()
         return res
@@ -48,28 +56,44 @@ class DynFunction:
 class Fexpr:
     def __init__(self, params, body):
         self.params, self.body = params, body
-    def __call__(self, env, *args):
-        dct = dict(zip(self.params, args))
-        env.append(dct)
+    def __call__(self, env, _, *args):
+        
+        if isinstance(self.params, list):
+            dct = dict(zip(self.params, args))
+            env.append(dct)
+        elif isinstance(self.params, Symbol):
+            env.append({self.params.str: args})
+        else:
+            raise ValueError('Fexpr: unknown parameter type')
+
         res = eval(env, self.body)
         env.pop()
+        
         return res
 
 # Special forms
-def env_ref(env, nth):
-    return env.get_reference(eval(env, nth))
+def env_ref(env, p_env, nth):
+    return env.get_reference(eval(p_env, nth))
 
-def eval_(env, expr, env_expr):
-    return eval(eval(env, env_expr), eval(env, expr))
+def eval_(env, p_env, expr):
+    return eval(env, eval(p_env, expr))
 
-def fexpr(env, params, body):
+def fexpr(env, _, params, body):
     return Fexpr([p.str for p in params], body)
 
-def dyn_lambda(env, params, body):
+def dyn_lambda(env, _, params, body):
     return DynFunction([p.str for p in params], body)
 
-def define(env, var, value):
-    env[-1][var.str] = eval(env, value)
+def define(env, p_env, var, value):
+    env[-1][var.str] = eval(p_env, value)
+
+def if_(env, _, cond, then, else_):
+    c = eval(env, cond)
+    if c:
+        return eval(env, then)
+    else:
+        return eval(env, else_)
+
 
 #################### Parsers
 
@@ -199,12 +223,14 @@ class Environment(list):
                 '>=': BuiltinFunction(op.ge),
                 '<=': BuiltinFunction(op.le),
                 '=': BuiltinFunction(op.eq),
+                'string-append': BuiltinFunction(op.add),
                 'write': BuiltinFunction(print),
                 'env-ref': env_ref,
                 'eval': eval_,
                 'fexpr': fexpr,
                 'dyn-lambda': dyn_lambda,
-                'define': define
+                'define': define,
+                'if': if_
             }])
         else: 
             super(Environment, self).__init__(lst)
@@ -247,13 +273,22 @@ def eval(env, expr):
         res = expr 
     elif isinstance(expr[0], Symbol):
         stack_trace.append(expr[0].str)
-        res = eval(env, expr[0])(env, *expr[1:])
+        res = eval(env, expr[0])(env, env, *expr[1:])
         stack_trace.pop()
+    elif isinstance(expr[0], list):
+        fn = eval(env, expr[0][0])
+        new_env = eval(env, expr[0][1])
+        args = [eval(env, a) for a in expr[1:]]
     else:
-        fn = eval(env, expr[0])
-        stack_trace.append(fn)
-        res = fn(env, *expr[1:])
-        stack_trace.pop()
+        call_position = eval(env, expr[0])
+        if isinstance(fst, list):
+            fun = call_position[0]
+            new_env = call_position[1]
+            fun(new_env, env, *expr[1:])
+        else: # Assume it's a function
+            stack_trace.append(fn)
+            res = call_position(env, env, *expr[1:])
+            stack_trace.pop()
 
     if(DEBUG and expr != res):
         print("==============================================")
@@ -266,6 +301,7 @@ def eval(env, expr):
 
 stack_trace = []
 def print_stack_trace():
+    if not DEBUG: return
     print("=================Stack trace==================")
     pprint.PrettyPrinter(indent=4).pprint(stack_trace)
     print("==============================================")
