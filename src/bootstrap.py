@@ -274,7 +274,7 @@ def abbreviation():
     e = yield datum
     return Cons(Symbol('quote'), Cons(e, emptyList))
 
-compound_datum = list_ ^ abbreviation
+compound_datum = list_ | vector | abbreviation
 datum = simple_datum ^ compound_datum
 datums = many(ignore >> datum << ignore)
 
@@ -338,7 +338,10 @@ def eval(env, expr):
     res = None
 
     if isinstance(expr, Symbol):
-        res = env.value_of_symbol(expr)
+        if expr.str == '*environment*':
+            res = env
+        else:
+            res = env.value_of_symbol(expr)
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # A list
