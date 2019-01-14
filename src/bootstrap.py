@@ -33,12 +33,19 @@ emptyList = EmptyList()
 
 class Cons(cabc.Sequence):
 
-    def __init__(self, a, b):
-        self.tup = (a, b)
-        # Updated when known whether the cdr of the last cons
-        # is an empty list. See '__iter__'
-        self.is_list = None
-    
+    def __init__(self, a, b=None):
+        if b == None:
+
+            x = emptyList
+            for el in reversed(list(a)):
+                x = Cons(el, x)
+
+            self.tup = x.tup
+            self.is_list = True
+        else:
+            self.is_list = isinstance(b, Cons) and b.is_list
+            self.tup = (a, b)
+     
     def car(self):
         return self.tup[0]
     
@@ -53,7 +60,6 @@ class Cons(cabc.Sequence):
                 yield pointer.car()
                 pointer = pointer.cdr()
             elif pointer == emptyList:
-                self.is_list = True
                 break
             else:
                 yield pointer
@@ -73,17 +79,19 @@ class Cons(cabc.Sequence):
         else:
             return "(" + " ".join(inner[:-1]) + " . " + inner[-1] + ")" 
      
-    def __eq__(self, other): return list(self) == list(other)
-
- 
-def cons_from_python_list(lst):
-    i = len(lst) - 1
-    result = emptyList
-    while i >= 0:
-        result = Cons(lst[i], result)
-        i -= 1
+    def __eq__(self, other):
+        if isinstance(other, Cons) or isinstance(other, list):
+            return list(self) == list(other)
+        else:
+            return False
     
-    return result
+    # Eval all, return new Cons
+    def eval_all(self, env):
+        return Cons(map(lambda e: eval(env, e), self))
+
+    # Eval all, return last
+    def eval_all_ret_last(self, env):
+        return reduce(lambda _, e: eval(env, e), self, None)
 
 class Vector(list):
  
@@ -104,26 +112,27 @@ class String(str):
 class BuiltinFunction:
     def __init__(self, fn):
         self.fn = fn
-    def __call__(self, env, p_env, *args):
-        return self.fn(*[eval(p_env, a) for a in args]) 
+    def __call__(self, env, p_env, args):
+        return self.fn(*args.eval_all(p_env))
     def __str__(self):
-        return "{BultinFunction %s}" % fn.__name__
+        return "{BultinFunction %s}" % self.fn.__name__
 
 # Dynamically scoped function
 class DynFunction:
     def __init__(self, params, body):
         self.params, self.body = params, body
-    def __call__(self, env, p_env, *args):
+    def __call__(self, env, p_env, args):
         
-        if isinstance(self.params, list):
-            dct = dict(zip(self.params, [eval(p_env, a) for a in args]))
+        if isinstance(self.params, Cons):
+            dct = dict(zip(map(str, self.params),
+                           args.eval_all(p_env)))
             env.append(dct)
         elif isinstance(self.params, Symbol):
-            env.append({self.params.str: [eval(p_env, a) for a in args]})
+            env.append({self.params.str: args.eval_all(p_env)})
         else:
             raise ValueError('Fexpr: unknown parameter type')
         
-        res = eval(env, self.body)
+        res = self.body.eval_all_ret_last(p_env)
         env.pop()
         return res
     
@@ -135,19 +144,19 @@ class DynFunction:
 class Fexpr:
     def __init__(self, params, body):
         self.params, self.body = params, body
-    def __call__(self, env, _, *args):
+    def __call__(self, env, _, args):
         
-        if isinstance(self.params, list):
-            dct = dict(zip(self.params, args))
+        if isinstance(self.params, Cons):
+            dct = dict(zip(map(str, self.params), args))
             env.append(dct)
         elif isinstance(self.params, Symbol):
             env.append({self.params.str: args})
         else:
             raise ValueError('Fexpr: unknown parameter type')
 
-        res = eval(env, self.body)
+        res = self.body.eval_all_ret_last(env, self.body)
         env.pop()
-        
+         
         return res
     
     def __str__(self):
@@ -156,27 +165,27 @@ class Fexpr:
 
 # Control flow primitives
 
-def eval_(env, p_env, expr):
-    return eval(env, eval(p_env, expr))
+def eval_(env, p_env, args):
+    return eval(env, eval(p_env, args[0]))
 
-def fexpr(env, _, params, body):
-    return Fexpr([p.str for p in params], body)
+def fexpr(env, _, args):
+    return Fexpr(args.car(), args.cdr())
 
-def dyn_lambda(env, _, params, body):
-    return DynFunction([p.str for p in params], body)
+def dyn_lambda(env, _, args):
+    return DynFunction(args.car(), args.cdr())
 
-def define(env, p_env, var, value):
-    env[-1][var.str] = eval(p_env, value)
+def define(env, p_env, args):
+    env[-1][args.car().str] = eval(p_env, args.cdr())
 
-def if_(env, _, cond, then, else_):
+def if_(env, _, args):
     c = eval(env, cond)
-    if c:
-        return eval(env, then)
+    if eval(env, args[0]):
+        return eval(env, args[1])
     else:
-        return eval(env, else_)
+        return eval(env, args[2])
 
-def equal(_, p_env, a, b):
-    return env(p_env, a) == env(p_env, b)
+def equal(_, p_env, args):
+    return env(p_env, args[0]) == env(p_env, args[1])
 
 
 #################### Parsers
@@ -249,7 +258,7 @@ def list_():
     yield string('(')
     es = yield many(datum << ignore)
     yield string(')')
-    return cons_from_python_list(es)
+    return Cons(es)
 
 @generate
 def vector():
@@ -263,13 +272,11 @@ def abbreviation():
     "Currently only supports quote '"
     yield string("'")
     e = yield datum
-    return [Symbol('quote'), e]
+    return Cons(Symbol('quote'), Cons(e, emptyList))
 
 compound_datum = list_ ^ abbreviation
 datum = simple_datum ^ compound_datum
 datums = many(ignore >> datum << ignore)
-
-# With help of http://norvig.com/lispy.html
 
 ###################### Environment
 
@@ -325,18 +332,6 @@ class Environment(Vector):
         keys = str(list(self[-1].keys()))
         return 'Env{' + str(len(self)) + ', ' + keys + '}'
     
-    # Make a reference to the environment
-    # chain. The reference starts nth dictionaries
-    # back.
-    def get_reference(self, nth_float):
-        nth = int(nth_float)
-        l = len(self)
-        if nth < l:
-            return Environment(self[0:l-nth])
-        else:
-            raise IndexError('Cannot make reference to environment: \
-                    %d is out of range of environment' % nth)
-    
 global_env = Environment()
 
 def eval(env, expr):
@@ -353,11 +348,11 @@ def eval(env, expr):
             callble = fst.car()
             new_env = fst.cdr()
             stack_trace.append(callble)
-            res = fun(new_env, env, *expr[1:])
+            res = fun(new_env, env, expr.cdr())
             stack_trace.pop()
         else:
             stack_trace.append(fst)
-            res = fst(env, env, *expr[1:])
+            res = fst(env, env, expr.cdr())
             stack_trace.pop()
     
     if(DEBUG and expr != res):
@@ -402,7 +397,6 @@ if __name__ == '__main__':
             i = input("> ")
             print("Input: \t\t", i.__repr__())
             expr = datum.parse_strict(i)
-            print("Parsed: \t", expr)
-            print("Evaluated: \t", eval_stack_trace(global_env, expr))
-
+            print("Parsed: \t", str(expr))
+            print("Evaluated: \t", str(eval_stack_trace(global_env, expr)))
 
