@@ -37,6 +37,24 @@ class SchemeTest(unittest.TestCase):
                 "'(some \"list\")",
                 [Symbol('quote'), [Symbol('some'), 'list']])
     
+    def str_test(self, data, s):
+        self.assertEqual(str(data), s)
+    
+    def test_str(self):
+        self.str_test(Symbol('abc'), 'abc')
+        self.str_test(String('abc'), "'abc'")
+        self.str_test(emptyList, '()')
+        self.str_test(Cons(1, 2), '(1 . 2)')
+        self.str_test(Cons(1, emptyList), '(1)')
+        self.str_test(Cons(1, Cons(2, emptyList)), '(1 2)')
+        self.str_test(Vector([1,2]), '#(1 2)')
+    
+    def test_eval_all(self):
+       self.assertEqual(
+               eval_all(global_env,
+                   datum.parse_strict('((+ 10 20) (+ 20 30))')),
+               Cons(30.0, Cons(50.0, emptyList)))
+
     def eval_test(self, code, result):
         self.assertEqual(eval_string(global_env, code), result)
 
