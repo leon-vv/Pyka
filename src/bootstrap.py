@@ -28,6 +28,8 @@ class Symbol:
 class EmptyList:
     def __str__(self):
         return "()"
+    def __iter__(self):
+        return iter(())
 
 emptyList = EmptyList()
 
@@ -35,7 +37,7 @@ class Cons(cabc.Sequence):
 
     def __init__(self, a, b=None):
         if b == None:
-
+        
             x = emptyList
             for el in reversed(list(a)):
                 x = Cons(el, x)
@@ -43,7 +45,7 @@ class Cons(cabc.Sequence):
             self.tup = x.tup
             self.is_list = True
         else:
-            self.is_list = isinstance(b, Cons) and b.is_list
+            self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
             self.tup = (a, b)
      
     def car(self):
@@ -85,13 +87,6 @@ class Cons(cabc.Sequence):
         else:
             return False
     
-    # Eval all, return new Cons
-    def eval_all(self, env):
-        return Cons(map(lambda e: eval(env, e), self))
-
-    # Eval all, return last
-    def eval_all_ret_last(self, env):
-        return reduce(lambda _, e: eval(env, e), self, None)
 
 class Vector(list):
  
@@ -113,7 +108,7 @@ class BuiltinFunction:
     def __init__(self, fn):
         self.fn = fn
     def __call__(self, env, p_env, args):
-        return self.fn(*args.eval_all(p_env))
+        return self.fn(*eval_all(p_env, args))
     def __str__(self):
         return "{BultinFunction %s}" % self.fn.__name__
 
@@ -125,14 +120,14 @@ class DynFunction:
         
         if isinstance(self.params, Cons):
             dct = dict(zip(map(str, self.params),
-                           args.eval_all(p_env)))
+                           eval_all(p_env, args)))
             env.append(dct)
         elif isinstance(self.params, Symbol):
-            env.append({self.params.str: args.eval_all(p_env)})
+            env.append({self.params.str: eval_all(p_env, args)})
         else:
             raise ValueError('Fexpr: unknown parameter type')
         
-        res = self.body.eval_all_ret_last(p_env)
+        res = eval_all_ret_last(p_env, self.body)
         env.pop()
         return res
     
@@ -154,7 +149,7 @@ class Fexpr:
         else:
             raise ValueError('Fexpr: unknown parameter type')
 
-        res = self.body.eval_all_ret_last(env, self.body)
+        res = eval_all_ret_last(env, self.body)
         env.pop()
          
         return res
@@ -299,6 +294,7 @@ class Environment(Vector):
                 'define': define,
                 'if': if_,
                 'equal?': equal,
+                'exit': BuiltinFunction(exit),
                  
                 # Data structure primitives
                 '+': BuiltinFunction(op.add),
@@ -312,7 +308,7 @@ class Environment(Vector):
                 'car': BuiltinFunction(lambda x: x.car()),
                 'cdr': BuiltinFunction(lambda x: x.cdr()),
                 'string-append': BuiltinFunction(op.add),
-                'write': BuiltinFunction(print)
+                'write': BuiltinFunction(print),
             }])
         else: 
             super().__init__(lst)
@@ -333,6 +329,15 @@ class Environment(Vector):
         return 'Env{' + str(len(self)) + ', ' + keys + '}'
     
 global_env = Environment()
+
+# Eval all, return new Cons
+def eval_all(env, it):
+    e = Cons(map(lambda e: eval(env, e), it))
+    return e
+
+# Eval all, return last
+def eval_all_ret_last(env, it):
+    return reduce(lambda _, e: eval(env, e), it, None)
 
 def eval(env, expr):
     res = None
