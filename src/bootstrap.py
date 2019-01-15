@@ -35,18 +35,18 @@ emptyList = EmptyList()
 
 class Cons(cabc.Sequence):
 
-    def __init__(self, a, b=None):
-        if b == None:
-        
-            x = emptyList
-            for el in reversed(list(a)):
-                x = Cons(el, x)
+    def __init__(self, a, b):
+        self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
+        self.tup = (a, b)
 
-            self.tup = x.tup
-            self.is_list = True
-        else:
-            self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
-            self.tup = (a, b)
+    def from_iterator(it):
+        x = emptyList
+        l = list(it)
+        i = len(l) - 1
+        while i >= 0:
+            x = Cons(l[i], x)
+            i = i - 1
+        return x
      
     def car(self):
         return self.tup[0]
@@ -98,6 +98,8 @@ class String(str):
 
     def __str__(self):
         return self.__repr__()
+
+# Hash table uses the standard Python dictionary
 
 # BultinFunction, DynFunction and Fexpr are callables
 # When evaluated, they are passed an environment in which
@@ -170,7 +172,7 @@ def dyn_lambda(env, _, args):
     return DynFunction(args.car(), args.cdr())
 
 def define(env, p_env, args):
-    env[-1][args.car().str] = eval(p_env, args.cdr())
+    env[-1][args.car().str] = eval(p_env, args.cdr().car())
 
 def if_(env, _, args):
     c = eval(env, cond)
@@ -253,7 +255,7 @@ def list_():
     yield string('(')
     es = yield many(datum << ignore)
     yield string(')')
-    return Cons(es)
+    return Cons.from_iterator(es)
 
 @generate
 def vector():
@@ -297,15 +299,23 @@ class Environment(Vector):
                 'exit': BuiltinFunction(exit),
                  
                 # Data structure primitives
-                '+': BuiltinFunction(op.add),
+
+                # Number
+                '+': BuiltinFunction(lambda *args: reduce(op.add, args, 0)),
                 '-': BuiltinFunction(op.sub),
-                '*': BuiltinFunction(op.mul),
+                '*': BuiltinFunction(lambda *args: reduce(op.mul, args, 1)),
                 '>': BuiltinFunction(op.gt),
                 '<': BuiltinFunction(op.lt),
                 '>=': BuiltinFunction(op.ge),
                 '<=': BuiltinFunction(op.le),
                 '=': BuiltinFunction(op.eq),
-
+                
+                # Boolean
+                'not': BuiltinFunction(lambda b: not b),
+                'boolean?': BuiltinFunction(lambda b: isinstance(b, bool)),
+                'and': BuiltinFunction(lambda *b: reduce(op.and_, b, True)),
+                'or': BuiltinFunction(lambda *b: reduce(op.or_, b, False)),
+                
                 # Hash table
                 'make-hash-table': BuiltinFunction(lambda: {}),
                 'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
@@ -314,12 +324,33 @@ class Environment(Vector):
                 'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
                 'hash-table-exists?': BuiltinFunction(lambda h, k: k.str in h),
                 'hash-table-set!': BuiltinFunction(lambda h, k, v: h.__setitem__(k.str, v)),
+                
                 # List
+                'pair?': BuiltinFunction(lambda c: isinstance(c, Cons)),
+                'cons': BuiltinFunction(lambda a, b: Cons(a, b)),
                 'car': BuiltinFunction(lambda x: x.car()),
                 'cdr': BuiltinFunction(lambda x: x.cdr()),
-
+                'null?': BuiltinFunction(lambda l: l == emptyList),
+                'list': BuiltinFunction(lambda *elms: Cons.from_iterator(elms)),
+                'length': BuiltinFunction(lambda l: len(l)),
+                'list->vector': BuiltinFunction(lambda l: Vector(l)),
+            
+                # Vector
+                'vector?': BuiltinFunction(lambda x: isinstance(x, Vector)),
+                'make-vector': BuiltinFunction(lambda x=None: Vector([])),
+                'vector': BuiltinFunction(lambda *it: Vector(it)),
+                'vector-length': BuiltinFunction(lambda v: len(v)),
+                'vector-ref': BuiltinFunction(lambda v, k: v[int(k)]),
+                'vector-set!': BuiltinFunction(lambda v, k, val: v.__setitem__(int(k), val)),
+                'vector->list': BuiltinFunction(lambda v: Cons.from_iterator(v)),
+                'vector-append': BuiltinFunction(lambda v, *args: Vector(v + list(args))),
+                
                 # String
-                'string-append': BuiltinFunction(op.add),
+                'string?': BuiltinFunction(lambda s: isinstance(s, String)),
+                'string-length': BuiltinFunction(lambda s: len(s)),
+                'string-ref': BuiltinFunction(lambda s, k: s[int(k)]),
+                'string-append': BuiltinFunction(lambda *s: String(reduce(op.add, s, ''))),
+                 
                 'write': BuiltinFunction(print),
             }])
         else: 
@@ -344,8 +375,7 @@ global_env = Environment()
 
 # Eval all, return new Cons
 def eval_all(env, it):
-    e = Cons(map(lambda e: eval(env, e), it))
-    return e
+    return Cons.from_iterator(map(lambda e: eval(env, e), it))
 
 # Eval all, return last
 def eval_all_ret_last(env, it):
