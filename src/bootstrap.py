@@ -305,8 +305,20 @@ class Environment(Vector):
                 '>=': BuiltinFunction(op.ge),
                 '<=': BuiltinFunction(op.le),
                 '=': BuiltinFunction(op.eq),
+
+                # Hash table
+                'make-hash-table': BuiltinFunction(lambda: {}),
+                'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
+                'hash-table-keys': BuiltinFunction(lambda h: Cons.from_iterator(h.keys())),
+                'hash-table-values': BuiltinFunction(lambda h: Cons.from_iterator(h.values())),
+                'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
+                'hash-table-exists?': BuiltinFunction(lambda h, k: k.str in h),
+                'hash-table-set!': BuiltinFunction(lambda h, k, v: h.__setitem__(k.str, v)),
+                # List
                 'car': BuiltinFunction(lambda x: x.car()),
                 'cdr': BuiltinFunction(lambda x: x.cdr()),
+
+                # String
                 'string-append': BuiltinFunction(op.add),
                 'write': BuiltinFunction(print),
             }])
