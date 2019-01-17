@@ -172,10 +172,9 @@ def dyn_lambda(env, _, args):
     return DynFunction(args.car(), args.cdr())
 
 def define(env, p_env, args):
-    env[-1][args.car().str] = eval(p_env, args.cdr().car())
+    env.car()[args.car().str] = eval(p_env, args.cdr().car())
 
 def if_(env, _, args):
-    c = eval(env, cond)
     if eval(env, args[0]):
         return eval(env, args[1])
     else:
@@ -277,101 +276,82 @@ datums = many(ignore >> datum << ignore)
 
 ###################### Environment
 
-# A dictionary in Python is a mapping from strings
-# to values. An environment is a collection of these
-# dictionaries. The dictionaries in an environment
-# holds only valid Scheme types as values. The keys
-# are normal Python strings but correspond to symbols
-# in the interpreted Scheme language.
-
-class Environment(Vector):
-
-    def __init__(self, lst=None):
-        if lst == None:
-            super().__init__([{
-                # Control flow primitives
-                'eval': eval_,
-                'fexpr': fexpr,
-                'dyn-lambda': dyn_lambda,
-                'define': define,
-                'if': if_,
-                'equal?': equal,
-                'exit': BuiltinFunction(exit),
-                 
-                # Data structure primitives
-
-                # Number
-                '+': BuiltinFunction(lambda *args: reduce(op.add, args, 0)),
-                '-': BuiltinFunction(op.sub),
-                '*': BuiltinFunction(lambda *args: reduce(op.mul, args, 1)),
-                '>': BuiltinFunction(op.gt),
-                '<': BuiltinFunction(op.lt),
-                '>=': BuiltinFunction(op.ge),
-                '<=': BuiltinFunction(op.le),
-                '=': BuiltinFunction(op.eq),
-                
-                # Boolean
-                'not': BuiltinFunction(lambda b: not b),
-                'boolean?': BuiltinFunction(lambda b: isinstance(b, bool)),
-                'and': BuiltinFunction(lambda *b: reduce(op.and_, b, True)),
-                'or': BuiltinFunction(lambda *b: reduce(op.or_, b, False)),
-                
-                # Hash table
-                'make-hash-table': BuiltinFunction(lambda: {}),
-                'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
-                'hash-table-keys': BuiltinFunction(lambda h: Cons.from_iterator(h.keys())),
-                'hash-table-values': BuiltinFunction(lambda h: Cons.from_iterator(h.values())),
-                'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
-                'hash-table-exists?': BuiltinFunction(lambda h, k: k.str in h),
-                'hash-table-set!': BuiltinFunction(lambda h, k, v: h.__setitem__(k.str, v)),
-                
-                # List
-                'pair?': BuiltinFunction(lambda c: isinstance(c, Cons)),
-                'cons': BuiltinFunction(lambda a, b: Cons(a, b)),
-                'car': BuiltinFunction(lambda x: x.car()),
-                'cdr': BuiltinFunction(lambda x: x.cdr()),
-                'null?': BuiltinFunction(lambda l: l == emptyList),
-                'list': BuiltinFunction(lambda *elms: Cons.from_iterator(elms)),
-                'length': BuiltinFunction(lambda l: len(l)),
-                'list->vector': BuiltinFunction(lambda l: Vector(l)),
-            
-                # Vector
-                'vector?': BuiltinFunction(lambda x: isinstance(x, Vector)),
-                'make-vector': BuiltinFunction(lambda x=None: Vector([])),
-                'vector': BuiltinFunction(lambda *it: Vector(it)),
-                'vector-length': BuiltinFunction(lambda v: len(v)),
-                'vector-ref': BuiltinFunction(lambda v, k: v[int(k)]),
-                'vector-set!': BuiltinFunction(lambda v, k, val: v.__setitem__(int(k), val)),
-                'vector->list': BuiltinFunction(lambda v: Cons.from_iterator(v)),
-                'vector-append': BuiltinFunction(lambda v, *args: Vector(v + list(args))),
-                
-                # String
-                'string?': BuiltinFunction(lambda s: isinstance(s, String)),
-                'string-length': BuiltinFunction(lambda s: len(s)),
-                'string-ref': BuiltinFunction(lambda s, k: s[int(k)]),
-                'string-append': BuiltinFunction(lambda *s: String(reduce(op.add, s, ''))),
-                 
-                'write': BuiltinFunction(print),
-            }])
-        else: 
-            super().__init__(lst)
-    
-    def value_of_symbol(self, symbol):
-        key = symbol.str
-        i = len(self) - 1
-        while i >= 0:
-            val = self[i].get(key)
-            if val != None:
-                return val
-            i -= 1
+global_env = Cons({
+    # Control flow primitives
+    'eval': eval_,
+    'fexpr': fexpr,
+    'dyn-lambda': dyn_lambda,
+    'define': define,
+    'set!': define, # Don't be mad :-)
+    'if': if_,
+    'equal?': equal,
+    'exit': BuiltinFunction(exit),
         
-        raise ValueError('Key %s could not be found in environment' % key)
-     
-    def __str__(self):
-        keys = str(list(self[-1].keys()))
-        return 'Env{' + str(len(self)) + ', ' + keys + '}'
+    # Data structure primitives
+
+    # Number
+    '+': BuiltinFunction(lambda *args: reduce(op.add, args, 0)),
+    '-': BuiltinFunction(op.sub),
+    '*': BuiltinFunction(lambda *args: reduce(op.mul, args, 1)),
+    '>': BuiltinFunction(op.gt),
+    '<': BuiltinFunction(op.lt),
+    '>=': BuiltinFunction(op.ge),
+    '<=': BuiltinFunction(op.le),
+    '=': BuiltinFunction(op.eq),
     
-global_env = Environment()
+    # Boolean
+    'not': BuiltinFunction(lambda b: not b),
+    'boolean?': BuiltinFunction(lambda b: isinstance(b, bool)),
+    'and': BuiltinFunction(lambda *b: reduce(op.and_, b, True)),
+    'or': BuiltinFunction(lambda *b: reduce(op.or_, b, False)),
+    
+    # Hash table
+    'make-hash-table': BuiltinFunction(lambda: {}),
+    'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
+    'hash-table-keys': BuiltinFunction(lambda h: Cons.from_iterator(h.keys())),
+    'hash-table-values': BuiltinFunction(lambda h: Cons.from_iterator(h.values())),
+    'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
+    'hash-table-exists?': BuiltinFunction(lambda h, k: k.str in h),
+    'hash-table-set!': BuiltinFunction(lambda h, k, v: h.__setitem__(k.str, v)),
+    
+    # List
+    'pair?': BuiltinFunction(lambda c: isinstance(c, Cons)),
+    'cons': BuiltinFunction(lambda a, b: Cons(a, b)),
+    'car': BuiltinFunction(lambda x: x.car()),
+    'cdr': BuiltinFunction(lambda x: x.cdr()),
+    'null?': BuiltinFunction(lambda l: l == emptyList),
+    'list': BuiltinFunction(lambda *elms: Cons.from_iterator(elms)),
+    'length': BuiltinFunction(lambda l: len(l)),
+    'list->vector': BuiltinFunction(lambda l: Vector(l)),
+
+    # Vector
+    'vector?': BuiltinFunction(lambda x: isinstance(x, Vector)),
+    'make-vector': BuiltinFunction(lambda x=None: Vector([])),
+    'vector': BuiltinFunction(lambda *it: Vector(it)),
+    'vector-length': BuiltinFunction(lambda v: len(v)),
+    'vector-ref': BuiltinFunction(lambda v, k: v[int(k)]),
+    'vector-set!': BuiltinFunction(lambda v, k, val: v.__setitem__(int(k), val)),
+    'vector->list': BuiltinFunction(lambda v: Cons.from_iterator(v)),
+    'vector-append': BuiltinFunction(lambda v, *args: Vector(v + list(args))),
+    
+    # String
+    'string?': BuiltinFunction(lambda s: isinstance(s, String)),
+    'string-length': BuiltinFunction(lambda s: len(s)),
+    'string-ref': BuiltinFunction(lambda s, k: s[int(k)]),
+    'string-append': BuiltinFunction(lambda *s: String(reduce(op.add, s, ''))),
+        
+    'write': BuiltinFunction(print),
+}, emptyList)
+
+def value_of_symbol(env, sym):
+    while True:
+        if env == emptyList:
+            raise ValueError('Key %s could not be found in environment' % sym.str)
+        else:
+            dct = env.car()
+            val = dct.get(sym.str)
+            if val != None: return val
+            env = env.cdr()
 
 # Eval all, return new Cons
 def eval_all(env, it):
@@ -388,7 +368,7 @@ def eval(env, expr):
         if expr.str == '*environment*':
             res = env
         else:
-            res = env.value_of_symbol(expr)
+            res = value_of_symbol(env, expr)
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # A list
