@@ -99,6 +99,10 @@ class String(str):
     def __str__(self):
         return self.__repr__()
 
+class HashTable(dict):
+    def __str__(self):
+        return "{HashTable (%d)}" % len(self)
+
 # Hash table uses the standard Python dictionary
 
 # BultinFunction, DynFunction and Fexpr are callables
@@ -123,16 +127,16 @@ class DynFunction:
         if isinstance(self.params, Cons):
             dct = dict(zip(map(str, self.params),
                            eval_all(p_env, args)))
-            env.append(dct)
         elif isinstance(self.params, Symbol):
-            env.append({self.params.str: eval_all(p_env, args)})
+            dct = {self.params.str: eval_all(p_env, args)}
+        elif self.params == emptyList:
+            dct = {}
         else:
             raise ValueError('Fexpr: unknown parameter type')
         
-        res = eval_all_ret_last(p_env, self.body)
-        env.pop()
+        res = eval_all_ret_last(Cons(HashTable(dct), env), self.body)
         return res
-    
+     
     def __str__(self):
         return "{DynamicFunction}"
 
@@ -145,15 +149,14 @@ class Fexpr:
         
         if isinstance(self.params, Cons):
             dct = dict(zip(map(str, self.params), args))
-            env.append(dct)
         elif isinstance(self.params, Symbol):
-            env.append({self.params.str: args})
+            dct = {self.params.str: args}
+        elif self.params == emptyList:
+            dct = {}
         else:
             raise ValueError('Fexpr: unknown parameter type')
 
-        res = eval_all_ret_last(env, self.body)
-        env.pop()
-         
+        res = eval_all_ret_last(Cons(HashTable(dct), env), self.body)
         return res
     
     def __str__(self):
@@ -174,6 +177,17 @@ def dyn_lambda(env, _, args):
 def define(env, p_env, args):
     env.car()[args.car().str] = eval(p_env, args.cdr().car())
 
+def set(env, p_env, args):
+    to_set = eval(p_env, args.cdr().car())
+    key = args.car().str
+    for ht in env:
+        if key in ht:
+            ht[key] = to_set
+            return to_set
+    raise ValueError('Key to set %s is not active in the current environment' % key)
+
+
+
 def if_(env, _, args):
     if eval(env, args[0]):
         return eval(env, args[1])
@@ -181,7 +195,7 @@ def if_(env, _, args):
         return eval(env, args[2])
 
 def equal(_, p_env, args):
-    return env(p_env, args[0]) == env(p_env, args[1])
+    return eval(p_env, args[0]) == eval(p_env, args[1])
 
 
 #################### Parsers
@@ -276,13 +290,13 @@ datums = many(ignore >> datum << ignore)
 
 ###################### Environment
 
-global_env = Cons({
+global_env = Cons(HashTable({
     # Control flow primitives
     'eval': eval_,
     'fexpr': fexpr,
     'dyn-lambda': dyn_lambda,
     'define': define,
-    'set!': define, # Don't be mad :-)
+    'set!': set,
     'if': if_,
     'equal?': equal,
     'exit': BuiltinFunction(exit),
@@ -306,8 +320,8 @@ global_env = Cons({
     'or': BuiltinFunction(lambda *b: reduce(op.or_, b, False)),
     
     # Hash table
-    'make-hash-table': BuiltinFunction(lambda: {}),
-    'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
+    'make-hash-table': BuiltinFunction(lambda: HashTable()),
+    'hash-table?': BuiltinFunction(lambda h: isinstance(h, HashTable)),
     'hash-table-keys': BuiltinFunction(lambda h: Cons.from_iterator(h.keys())),
     'hash-table-values': BuiltinFunction(lambda h: Cons.from_iterator(h.values())),
     'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
@@ -341,7 +355,7 @@ global_env = Cons({
     'string-append': BuiltinFunction(lambda *s: String(reduce(op.add, s, ''))),
         
     'write': BuiltinFunction(print),
-}, emptyList)
+}), emptyList)
 
 def value_of_symbol(env, sym):
     while True:
@@ -378,7 +392,7 @@ def eval(env, expr):
             callble = fst.car()
             new_env = fst.cdr()
             stack_trace.append(callble)
-            res = fun(new_env, env, expr.cdr())
+            res = callble(new_env, env, expr.cdr())
             stack_trace.pop()
         else:
             stack_trace.append(fst)
@@ -420,13 +434,11 @@ if __name__ == '__main__':
             exprs = datums.parse_strict(content)
             for e in exprs:
                 eval_stack_trace(global_env, e)
-    else: # REPL
-        print('No file supplied, starting REPL')
-        while True:
-            stack_trace = []
-            i = input("> ")
-            print("Input: \t\t", i.__repr__())
-            expr = datum.parse_strict(i)
-            print("Parsed: \t", str(expr))
-            print("Evaluated: \t", str(eval_stack_trace(global_env, expr)))
+    while True:
+        stack_trace = []
+        i = input("> ")
+        print("Input: \t\t", i.__repr__())
+        expr = datum.parse_strict(i)
+        print("Parsed: \t", str(expr))
+        print("Evaluated: \t", str(eval_stack_trace(global_env, expr)))
 
