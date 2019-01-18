@@ -472,10 +472,13 @@ if __name__ == '__main__':
             for e in exprs:
                 eval_stack_trace(global_env, e)
     while True:
-        stack_trace = []
-        i = input("> ")
-        print("Input: \t\t", i.__repr__())
-        expr = datum.parse_strict(i)
-        print("Parsed: \t", scheme_repr(expr))
-        print("Evaluated: \t", scheme_repr(eval_stack_trace(global_env, expr)))
+        try:
+            stack_trace = []
+            i = input("> ")
+            print("Input: \t\t", i.__repr__())
+            expr = datum.parse_strict(i)
+            print("Parsed: \t", scheme_repr(expr))
+            print("Evaluated: \t", scheme_repr(eval_stack_trace(global_env, expr)))
+        except Exception as e:
+            print('EXCEPTION: ', e)
 
