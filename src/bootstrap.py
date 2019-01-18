@@ -183,7 +183,7 @@ def block_comment():
         elif p == '|#':
             count -= 1
 
-ignore = many(block_comment | comment | spaces())
+ignore = many(block_comment ^ comment ^ space())
 
 def escaped_char_parser(char, res):
     return string('\\' + char).result(res)
