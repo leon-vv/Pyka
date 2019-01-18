@@ -22,12 +22,13 @@ class Symbol:
         else:
             return False
     
-    def __str__(self):
+    def scheme_repr(self):
         return self.str
 
 class EmptyList:
-    def __str__(self):
+    def scheme_repr(self):
         return "()"
+    
     def __iter__(self):
         return iter(())
 
@@ -73,8 +74,8 @@ class Cons(cabc.Sequence):
     def __getitem__(self, key):
         return list(self)[key]
     
-    def __str__(self):
-        inner = list(map(str, self))
+    def scheme_repr(self):
+        inner = list(map(scheme_repr, self))
         
         if self.is_list:
             return "(" + " ".join(inner) + ")"
@@ -90,17 +91,20 @@ class Cons(cabc.Sequence):
 
 class Vector(list):
  
-    def __str__(self):
-        inner = map(str, self)
+    def scheme_repr(self):
+        inner = map(scheme_repr, self)
         return "#(" + " ".join(inner) + ")"
 
 class String(str):
 
-    def __str__(self):
-        return self.__repr__()
+    def python_string(self):
+        return super().__str__()
+     
+    def scheme_repr(self):
+        return '"' + (super().__repr__())[1:-1] + '"'
 
 class HashTable(dict):
-    def __str__(self):
+    def scheme_repr(self):
         return "{HashTable (%d)}" % len(self)
 
 # Hash table uses the standard Python dictionary
@@ -115,7 +119,7 @@ class BuiltinFunction:
         self.fn = fn
     def __call__(self, env, p_env, args):
         return self.fn(*eval_all(p_env, args))
-    def __str__(self):
+    def scheme_repr(self):
         return "{BultinFunction %s}" % self.fn.__name__
 
 # Dynamically scoped function
@@ -137,7 +141,7 @@ class DynFunction:
         res = eval_all_ret_last(Cons(HashTable(dct), env), self.body)
         return res
      
-    def __str__(self):
+    def scheme_repr(self):
         return "{DynamicFunction}"
 
 
@@ -159,44 +163,16 @@ class Fexpr:
         res = eval_all_ret_last(Cons(HashTable(dct), env), self.body)
         return res
     
-    def __str__(self):
+    def scheme_repr(self):
         return "{FunctionalExpression}"
 
-
-# Control flow primitives
-
-def eval_(env, p_env, args):
-    return eval(env, eval(p_env, args[0]))
-
-def fexpr(env, _, args):
-    return Fexpr(args.car(), args.cdr())
-
-def dyn_lambda(env, _, args):
-    return DynFunction(args.car(), args.cdr())
-
-def define(env, p_env, args):
-    env.car()[args.car().str] = eval(p_env, args.cdr().car())
-
-def set(env, p_env, args):
-    to_set = eval(p_env, args.cdr().car())
-    key = args.car().str
-    for ht in env:
-        if key in ht:
-            ht[key] = to_set
-            return to_set
-    raise ValueError('Key to set %s is not active in the current environment' % key)
-
-
-
-def if_(env, _, args):
-    if eval(env, args[0]):
-        return eval(env, args[1])
+def scheme_repr(val):
+    if isinstance(val, float) or isinstance(val, int):
+        return str(val)
+    elif val == None:
+        return 'None'
     else:
-        return eval(env, args[2])
-
-def equal(_, p_env, args):
-    return eval(p_env, args[0]) == eval(p_env, args[1])
-
+        return val.scheme_repr()
 
 #################### Parsers
 
@@ -208,7 +184,18 @@ def comment():
     # Optional not yet supported
     yield string('\n') ^ string('')
 
-ignore = comment ^ spaces()
+@generate
+def block_comment():
+    yield string('#|')
+    count = 1
+    while count > 0:
+        p = yield (string('#|') ^ string('|#') ^ none_of(''))
+        if p == '#|':
+            count += 1
+        elif p == '|#':
+            count -= 1
+
+ignore = many(block_comment | comment | spaces())
 
 def escaped_char_parser(char, res):
     return string('\\' + char).result(res)
@@ -284,14 +271,62 @@ def abbreviation():
     e = yield datum
     return Cons(Symbol('quote'), Cons(e, emptyList))
 
-compound_datum = list_ | vector | abbreviation
+compound_datum = list_ ^ vector ^ abbreviation
 datum = simple_datum ^ compound_datum
 datums = many(ignore >> datum << ignore)
 
 ###################### Environment
 
+# Control flow primitives
+
+def eval_(env, p_env, args):
+    return eval(env, eval(p_env, args[0]))
+
+def fexpr(env, _, args):
+    return Fexpr(args.car(), args.cdr())
+
+def dyn_lambda(env, _, args):
+    return DynFunction(args.car(), args.cdr())
+
+def define(env, p_env, args):
+    env.car()[args.car().str] = eval(p_env, args.cdr().car())
+
+def set(env, p_env, args):
+    to_set = eval(p_env, args.cdr().car())
+    key = args.car().str
+    for ht in env:
+        if key in ht:
+            ht[key] = to_set
+            return to_set
+    raise ValueError('Key to set %s is not active in the current environment' % key)
+
+def if_(env, _, args):
+    if eval(env, args[0]):
+        return eval(env, args[1])
+    else:
+        return eval(env, args[2])
+
+def equal(_, p_env, args):
+    return eval(p_env, args.car()) == eval(p_env, args[1])
+
+def apply_(env, p_env, args):
+    f = eval(p_env, args.car())
+    lst = eval(p_env, args.cdr().car())
+    return f(env, p_env, lst)
+    
+# Data structure primitives 
+
+def map_(env, p_env, args):
+    f = eval(p_env, args.car())
+    lst = eval(p_env, args.cdr().car())
+    print(f, lst)
+    return Cons.from_iterator(
+            [f(env, p_env, Cons(e, emptyList)) for e in lst])
+
+
 global_env = Cons(HashTable({
     # Control flow primitives
+    
     'eval': eval_,
     'fexpr': fexpr,
     'dyn-lambda': dyn_lambda,
@@ -300,6 +335,10 @@ global_env = Cons(HashTable({
     'if': if_,
     'equal?': equal,
     'exit': BuiltinFunction(exit),
+
+    # Not really primitives, but easier to implement in Python
+    'quote': lambda env,p_env,args: args.car(),
+    'apply': apply_,
         
     # Data structure primitives
 
@@ -337,6 +376,7 @@ global_env = Cons(HashTable({
     'list': BuiltinFunction(lambda *elms: Cons.from_iterator(elms)),
     'length': BuiltinFunction(lambda l: len(l)),
     'list->vector': BuiltinFunction(lambda l: Vector(l)),
+    'map': map_,
 
     # Vector
     'vector?': BuiltinFunction(lambda x: isinstance(x, Vector)),
@@ -353,8 +393,13 @@ global_env = Cons(HashTable({
     'string-length': BuiltinFunction(lambda s: len(s)),
     'string-ref': BuiltinFunction(lambda s, k: s[int(k)]),
     'string-append': BuiltinFunction(lambda *s: String(reduce(op.add, s, ''))),
-        
-    'write': BuiltinFunction(print),
+    'string-join': BuiltinFunction(lambda sep, s: String(sep.join(s))),
+    'string->symbol': BuiltinFunction(lambda s: Symbol(s.python_string())),
+    
+    # Symbol
+    'symbol->string': BuiltinFunction(lambda sym: String(sym.str)),
+    
+    'write': BuiltinFunction(lambda *args: print(*args))
 }), emptyList)
 
 def value_of_symbol(env, sym):
@@ -439,6 +484,6 @@ if __name__ == '__main__':
         i = input("> ")
         print("Input: \t\t", i.__repr__())
         expr = datum.parse_strict(i)
-        print("Parsed: \t", str(expr))
-        print("Evaluated: \t", str(eval_stack_trace(global_env, expr)))
+        print("Parsed: \t", scheme_repr(expr))
+        print("Evaluated: \t", scheme_repr(eval_stack_trace(global_env, expr)))
 
