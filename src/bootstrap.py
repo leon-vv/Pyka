@@ -88,27 +88,6 @@ class Cons(cabc.Sequence):
         else:
             return False
     
-
-class Vector(list):
- 
-    def scheme_repr(self):
-        inner = map(scheme_repr, self)
-        return "#(" + " ".join(inner) + ")"
-
-class String(str):
-
-    def python_string(self):
-        return super().__str__()
-     
-    def scheme_repr(self):
-        return '"' + (super().__repr__())[1:-1] + '"'
-
-class HashTable(dict):
-    def scheme_repr(self):
-        return "{HashTable (%d)}" % len(self)
-
-# Hash table uses the standard Python dictionary
-
 # BultinFunction, DynFunction and Fexpr are callables
 # When evaluated, they are passed an environment in which
 # their 'body' should be evaluated (env) and an environment
@@ -138,7 +117,7 @@ class DynFunction:
         else:
             raise ValueError('Fexpr: unknown parameter type')
         
-        res = eval_all_ret_last(Cons(HashTable(dct), env), self.body)
+        res = eval_all_ret_last(Cons(dct, env), self.body)
         return res
      
     def scheme_repr(self):
@@ -160,15 +139,24 @@ class Fexpr:
         else:
             raise ValueError('Fexpr: unknown parameter type')
 
-        res = eval_all_ret_last(Cons(HashTable(dct), env), self.body)
+        res = eval_all_ret_last(Cons(dct, env), self.body)
         return res
     
     def scheme_repr(self):
         return "{FunctionalExpression}"
 
 def scheme_repr(val):
-    if isinstance(val, float) or isinstance(val, int):
+    if isinstance(val, bool):
+        return "#t" if val else "#f"
+    elif isinstance(val, float) or isinstance(val, int):
         return str(val)
+    elif isinstance(val, list):
+        inner = map(scheme_repr, self)
+        return "#(" + " ".join(inner) + ")"
+    elif isinstance(val, str):
+        return '"' + repr(val)[1:-1] + '"'
+    elif isinstance(val, dict):
+        return "{HashTable (%d)}" % len(self)
     elif val == None:
         return 'None'
     else:
@@ -241,7 +229,7 @@ escaped_or_char = escaped_char ^ none_of('"')
 
 # Inefficient, maybe optimize later
 string_ = (string('"') >> many(escaped_or_char) << string('"')) \
-        .parsecmap(lambda lst: String(''.join(lst)))
+        .parsecmap(lambda lst: ''.join(lst))
 
 boolean = (string('#true') ^ string('#t')).result(True) ^ \
             (string('#false') ^ string('#f')).result(False)
@@ -262,7 +250,7 @@ def vector():
     yield string('#(')
     es = yield many(datum << ignore)
     yield string(')')
-    return Vector(es)
+    return es
 
 @generate
 def abbreviation():
@@ -328,7 +316,7 @@ def map_(env, p_env, args):
             [f(env, p_env, Cons(e, emptyList)) for e in lst])
 
 
-global_env = Cons(HashTable({
+global_env = Cons({
     # Control flow primitives
     
     'eval': eval_,
@@ -363,8 +351,8 @@ global_env = Cons(HashTable({
     'or': BuiltinFunction(lambda *b: reduce(op.or_, b, False)),
     
     # Hash table
-    'make-hash-table': BuiltinFunction(lambda: HashTable()),
-    'hash-table?': BuiltinFunction(lambda h: isinstance(h, HashTable)),
+    'make-hash-table': BuiltinFunction(lambda: {}),
+    'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
     'hash-table-keys': BuiltinFunction(lambda h: Cons.from_iterator(h.keys())),
     'hash-table-values': BuiltinFunction(lambda h: Cons.from_iterator(h.values())),
     'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
@@ -379,32 +367,32 @@ global_env = Cons(HashTable({
     'null?': BuiltinFunction(lambda l: l == emptyList),
     'list': BuiltinFunction(lambda *elms: Cons.from_iterator(elms)),
     'length': BuiltinFunction(lambda l: len(l)),
-    'list->vector': BuiltinFunction(lambda l: Vector(l)),
+    'list->vector': BuiltinFunction(lambda l: list(l)),
     'map': map_,
 
     # Vector
-    'vector?': BuiltinFunction(lambda x: isinstance(x, Vector)),
-    'make-vector': BuiltinFunction(lambda x=None: Vector([])),
-    'vector': BuiltinFunction(lambda *it: Vector(it)),
+    'vector?': BuiltinFunction(lambda x: isinstance(x, list)),
+    'make-vector': BuiltinFunction(lambda x=None: []),
+    'vector': BuiltinFunction(lambda *it: list(it)),
     'vector-length': BuiltinFunction(lambda v: len(v)),
     'vector-ref': BuiltinFunction(lambda v, k: v[int(k)]),
     'vector-set!': BuiltinFunction(lambda v, k, val: v.__setitem__(int(k), val)),
     'vector->list': BuiltinFunction(lambda v: Cons.from_iterator(v)),
-    'vector-append': BuiltinFunction(lambda v, *args: Vector(v + list(args))),
+    'vector-append': BuiltinFunction(lambda v, *args: v + list(args)),
     
     # String
-    'string?': BuiltinFunction(lambda s: isinstance(s, String)),
+    'string?': BuiltinFunction(lambda s: isinstance(s, str)),
     'string-length': BuiltinFunction(lambda s: len(s)),
     'string-ref': BuiltinFunction(lambda s, k: s[int(k)]),
-    'string-append': BuiltinFunction(lambda *s: String(reduce(op.add, s, ''))),
-    'string-join': BuiltinFunction(lambda sep, s: String(sep.join(s))),
-    'string->symbol': BuiltinFunction(lambda s: Symbol(s.python_string())),
+    'string-append': BuiltinFunction(lambda *s: reduce(op.add, s, '')),
+    'string-join': BuiltinFunction(lambda sep, s: sep.join(s)),
+    'string->symbol': BuiltinFunction(lambda s: Symbol(s)),
     
     # Symbol
-    'symbol->string': BuiltinFunction(lambda sym: String(sym.str)),
-    
+    'symbol->string': BuiltinFunction(lambda sym: sym.str),
+     
     'write': BuiltinFunction(lambda *args: print(*args))
-}), emptyList)
+}, emptyList)
 
 def value_of_symbol(env, sym):
     while True:
