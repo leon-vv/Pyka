@@ -301,10 +301,14 @@ def set(env, p_env, args):
     raise ValueError('Key to set %s is not active in the current environment' % key)
 
 def if_(env, _, args):
-    if eval(env, args[0]):
-        return eval(env, args[1])
+    cdr = args.cdr()
+    cddr = cdr.cdr()
+    if eval(env, args.car()):
+        return eval(env, cdr.car())
+    elif cddr != emptyList:
+        return eval(env, cddr.car())
     else:
-        return eval(env, args[2])
+        return False
 
 def equal(_, p_env, args):
     return eval(p_env, args.car()) == eval(p_env, args[1])
