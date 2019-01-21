@@ -2,6 +2,7 @@ import re
 import sys
 import math
 import pprint
+import traceback
 import operator as op
 import collections.abc as cabc
 
@@ -480,5 +481,9 @@ if __name__ == '__main__':
             print("Parsed: \t", scheme_repr(expr))
             print("Evaluated: \t", scheme_repr(eval_stack_trace(global_env, expr)))
         except Exception as e:
-            print('EXCEPTION: ', e)
+            print('\nEXCEPTION: \t', e)
+            last = traceback.format_tb(e.__traceback__)[-1]
+            print('\n', last)
+            global_env.car()['*trace*'] = traceback.format_exc()
+            print('Use (write *trace*) to see entire stack trace')
 
