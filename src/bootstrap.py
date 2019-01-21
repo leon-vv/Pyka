@@ -431,68 +431,41 @@ def eval(env, expr):
 
     if isinstance(expr, Symbol):
         if expr.str == '*environment*':
-            res = env
+            return env
         else:
-            res = value_of_symbol(env, expr)
+            return value_of_symbol(env, expr)
     elif not isinstance(expr, Cons): # Constant literal
-        res = expr 
-    else: # A list
-        fst = eval(env, expr[0])
+        return expr 
+    else: # It's a list
+        fst = eval(env, expr.car())
          
         if isinstance(fst, Cons):
             callble = fst.car()
             new_env = fst.cdr()
-            stack_trace.append(callble)
-            res = callble(new_env, env, expr.cdr())
-            stack_trace.pop()
-        else:
-            stack_trace.append(fst)
-            res = fst(env, env, expr.cdr())
-            stack_trace.pop()
-    
-    if(DEBUG and expr != res):
-        print("==============================================")
-        print('Evaluated: ', expr)
-        print('Result: ', res)
-        print("==============================================")
-    
-    return res
+            return callble(new_env, env, expr.cdr())
+         
+        return fst(env, env, expr.cdr())
 
-
-stack_trace = []
-
-def print_stack_trace():
-    if not DEBUG: return
-    print("=================Stack trace==================")
-    pprint.PrettyPrinter(indent=4).pprint(stack_trace)
-    print("==============================================")
-
-def eval_stack_trace(env, expr):
-    try:
-        return eval(env, expr)
-    except:
-        print_stack_trace()
-        raise
-
-def eval_string(env, str_):
-    return eval_stack_trace(env, datum.parse_strict(str_))
+def eval_string(str_):
+    return eval(global_env, datum.parse_strict(str_))
 
 if __name__ == '__main__':
+    
     if len(sys.argv) > 1:
         file = sys.argv[1]
         with open(file, 'r') as fd:
             content = fd.read()
             exprs = datums.parse_strict(content)
             for e in exprs:
-                eval_stack_trace(global_env, e)
+                eval(global_env, e)
+    
     while True:
         try:
-            stack_trace = []
             i = input("> ")
             print("Input: \t\t", i.__repr__())
             expr = datum.parse_strict(i)
             print("Parsed: \t", scheme_repr(expr))
-            print("Evaluated: \t", scheme_repr(eval_stack_trace(global_env, expr)))
+            print("Evaluated: \t", scheme_repr(eval(global_env, expr)))
         except Exception as e:
             print('\nEXCEPTION: \t', e)
             last = traceback.format_tb(e.__traceback__)[-1]
