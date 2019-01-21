@@ -41,14 +41,27 @@ class Cons(cabc.Sequence):
         self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
         self.tup = (a, b)
 
-    def from_iterator(it):
+    def from_iterator(it, return_list=True):
         x = emptyList
         l = list(it)
         i = len(l) - 1
+        
+        if len(l) <= 1 and not return_list:
+            raise ValueError('Cannot return pair with less than two values')
+        elif not return_list:
+            x = Cons(l[i - 1], l[i])
+            i -= 1
+        
         while i >= 0:
             x = Cons(l[i], x)
             i = i - 1
+        
         return x
+    
+    # Structure preserving map
+    # If 'self' is a pair, a pair will be returned
+    def map(self, fun):
+        return Cons.from_iterator(self, fun, return_list=self.is_list)
      
     def car(self):
         return self.tup[0]
