@@ -268,11 +268,16 @@ def vector():
 
 @generate
 def abbreviation():
-    "Currently only supports quote '"
-    yield string("'")
+    prefix_to_sym = {
+        "'": 'quote',
+        '`': 'quasiquote',
+        ',': 'unquote',
+        ',@': 'unquote-splicing'
+    }
+    prefix = yield string("'") | string('`') | (string(',@') ^ string(','))
     e = yield datum
-    return Cons(Symbol('quote'), Cons(e, emptyList))
-
+    return Cons(Symbol(prefix_to_sym[prefix]), Cons(e, emptyList))
+    
 compound_datum = list_ ^ vector ^ abbreviation
 datum = simple_datum ^ compound_datum
 datums = many(ignore >> datum << ignore)
@@ -320,15 +325,32 @@ def apply_(env, p_env, args):
     lst = eval(p_env, args.cdr().car())
     return f(env, p_env, lst)
     
+def quasiquote_cons(env, p_env, cons):
+
+    for val in cons:
+        if isinstance(val, Cons) and val.car() == Symbol('unquote-splicing'):
+            yield from eval(env, val.cdr().car())
+        else:
+            yield quasiquote(env, p_env, val, is_list = False)
+
+def quasiquote(env, p_env, args, is_list = True):
+    a = args.car() if is_list else args
+
+    if isinstance(a, Cons) and a.car() == Symbol('unquote'):
+        return eval(env, a.cdr().car())
+    elif isinstance(a, Cons):
+        return Cons.from_iterator(
+                quasiquote_cons(env, p_env, a),
+                return_list=a.is_list)
+    else:
+        return a 
+
 # Data structure primitives 
 
 def map_(env, p_env, args):
     f = eval(p_env, args.car())
     lst = eval(p_env, args.cdr().car())
-    print(f, lst)
-    return Cons.from_iterator(
-            [f(env, p_env, Cons(e, emptyList)) for e in lst])
-
+    return lst.map(lambda e: f(env, p_env, e))
 
 global_env = Cons({
     # Control flow primitives
@@ -341,8 +363,8 @@ global_env = Cons({
     'if': if_,
     'equal?': equal,
     'exit': BuiltinFunction(exit),
-
-    # Not really primitives, but easier to implement in Python
+    
+    'quasiquote': quasiquote,
     'quote': lambda env,p_env,args: args.car(),
     'apply': apply_,
         
