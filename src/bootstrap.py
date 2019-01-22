@@ -120,9 +120,9 @@ class DynFunction:
     def __init__(self, params, body):
         self.params, self.body = params, body
     def __call__(self, env, p_env, args):
-        
+         
         if isinstance(self.params, Cons):
-            dct = dict(zip(map(str, self.params),
+            dct = dict(zip(map(lambda sym: sym.str, self.params),
                            eval_all(p_env, args)))
         elif isinstance(self.params, Symbol):
             dct = {self.params.str: eval_all(p_env, args)}
@@ -145,7 +145,7 @@ class Fexpr:
     def __call__(self, env, _, args):
         
         if isinstance(self.params, Cons):
-            dct = dict(zip(map(str, self.params), args))
+            dct = dict(zip(map(lambda sym: sym.str, self.params), args))
         elif isinstance(self.params, Symbol):
             dct = {self.params.str: args}
         elif self.params == emptyList:
