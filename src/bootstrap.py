@@ -3,8 +3,14 @@ import sys
 import math
 import pprint
 import traceback
+import os
+import atexit
+import readline
 import operator as op
 import collections.abc as cabc
+
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 
 from functools import reduce
 from parsec import *
@@ -352,7 +358,8 @@ def map_(env, p_env, args):
     lst = eval(p_env, args.cdr().car())
     return lst.map(lambda e: f(env, p_env, e))
 
-global_env = Cons({
+def new_global_env():
+    return Cons({
     # Control flow primitives
     
     'eval': eval_,
@@ -428,7 +435,7 @@ global_env = Cons({
     'symbol->string': BuiltinFunction(lambda sym: sym.str),
      
     'write': BuiltinFunction(lambda *args: print(*args))
-}, emptyList)
+    }, emptyList)
 
 def value_of_symbol(env, sym):
     while True:
@@ -469,29 +476,82 @@ def eval(env, expr):
         return fst(env, env, expr.cdr())
 
 def eval_string(str_):
-    return eval(global_env, datum.parse_strict(str_))
+    return eval(new_global_env(), datum.parse_strict(str_))
 
+def read_execute_file(env, file_name):
+    with open(file_name, 'r') as fd:
+        content = fd.read()
+        exprs = datums.parse_strict(content)
+        for e in exprs:
+            eval(env, e)
+
+def setup_repl_history():
+    try:
+        histfile = os.path.join(os.path.expanduser('~'), '.pyka_history')
+        readline.read_history_file(histfile)
+        readline.set_history_length(1000)
+    except IOError as e:
+        print('Failed to read history file: ', e)
+        pass
+    
+    atexit.register(readline.write_history_file, histfile)
+
+# Read-Eval-Print
+def rep(env):
+    try:
+        i = input("> ")
+        print("Input: \t\t", i.__repr__())
+        expr = datum.parse_strict(i)
+        print("Parsed: \t", scheme_repr(expr))
+        print("Evaluated: \t", scheme_repr(eval(env, expr)))
+    except Exception as e:
+        print('\nEXCEPTION: \t', e)
+        last = traceback.format_tb(e.__traceback__)[-1]
+        print('\n', last)
+        env.car()['*trace*'] = traceback.format_exc()
+        print('Use (write *trace*) to see entire stack trace')
+
+def on_file_modify(file_name, callback):
+    obs = Observer()
+    handler = PatternMatchingEventHandler([file_name])
+    handler.on_modified = lambda e: callback(e)
+    obs.schedule(handler, os.path.dirname(file_name))
+    obs.start()
+ 
 if __name__ == '__main__':
     
+    env = new_global_env()
+    reload = False
+    
+    def reset():
+        print('\nInput file has been changed. Reloading.')
+        env = new_global_env()
+        read_execute_file(env, sys.argv[1])
+    
     if len(sys.argv) > 1:
-        file = sys.argv[1]
-        with open(file, 'r') as fd:
-            content = fd.read()
-            exprs = datums.parse_strict(content)
-            for e in exprs:
-                eval(global_env, e)
+         
+        read_execute_file(env, sys.argv[1])
+         
+        def modified(e):
+            global reload
+            
+            current_input = readline.get_line_buffer()
+            if current_input == '':
+                reset()
+                print('> ', end='', flush=True)
+            else:
+                reload = True
+         
+        on_file_modify(sys.argv[1], modified)
+     
+    setup_repl_history() 
     
     while True:
-        try:
-            i = input("> ")
-            print("Input: \t\t", i.__repr__())
-            expr = datum.parse_strict(i)
-            print("Parsed: \t", scheme_repr(expr))
-            print("Evaluated: \t", scheme_repr(eval(global_env, expr)))
-        except Exception as e:
-            print('\nEXCEPTION: \t', e)
-            last = traceback.format_tb(e.__traceback__)[-1]
-            print('\n', last)
-            global_env.car()['*trace*'] = traceback.format_exc()
-            print('Use (write *trace*) to see entire stack trace')
+        if reload:
+            reset()
+            reload = False
+        rep(env)
 
+
+
+    
