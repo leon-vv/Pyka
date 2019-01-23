@@ -364,6 +364,9 @@ def map_(env, p_env, args):
     lst = args.cdr().car()
     return lst.map(lambda e: f(env, p_env, e))
 
+def write_(*args):
+    print(*[a if isinstance(a, str) else scheme_repr(a) for a in args])
+
 def new_global_env():
     PC = PythonCallable
     SC = SchemeCallable
@@ -450,7 +453,7 @@ def new_global_env():
     # Symbol
     'symbol->string': s_c(lambda sym: sym.str),
      
-    'write': s_c(lambda *args: print(*[scheme_repr(a) for a in args]))
+    'write': s_c(write_)
     }, emptyList)
 
     for key, val in env.car().items():
