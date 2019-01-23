@@ -16,6 +16,7 @@ from functools import reduce
 from parsec import *
 
 DEBUG = False
+stack_trace = []
 
 ################### Data types
 
@@ -107,49 +108,41 @@ class Cons(cabc.Sequence):
             return list(self) == list(other)
         else:
             return False
-    
-# BultinFunction, DynFunction and Fexpr are callables
-# When evaluated, they are passed an environment in which
+
+# When SchemeCallable or PythonCallable are evaluated,
+# they are passed an environment in which
 # their 'body' should be evaluated (env) and an environment
 # in which their parameters are evaluated (p_env).
 
-class BuiltinFunction:
-    def __init__(self, fn):
-        self.fn = fn
-    def __call__(self, env, p_env, args):
-        return self.fn(*eval_all(p_env, args))
+class PythonCallable:
+    def __init__(self, fn, evaluate):
+        self.fn, self.evaluate = fn, evaluate
+
+    def __call__(self, env, p_env, args, evaluate=None):
+        global stack_trace
+        
+        if evaluate == None: evaluate = self.evaluate
+        if evaluate: args = eval_all(p_env, args)
+         
+        stack_trace.append(self.scheme_repr())
+        res = self.fn(env, p_env, args)
+        stack_trace.pop()
+        return res
+    
     def scheme_repr(self):
         return "{BultinFunction %s}" % self.fn.__name__
 
 # Dynamically scoped function
-class DynFunction:
-    def __init__(self, params, body):
-        self.params, self.body = params, body
-    def __call__(self, env, p_env, args):
+class SchemeCallable:
+    def __init__(self, params, body, type):
+        self.params, self.body, self.type, self.name = params, body, type, None
+    def __call__(self, env, p_env, args, evaluate=None):
          
-        if isinstance(self.params, Cons):
-            dct = dict(zip(map(lambda sym: sym.str, self.params),
-                           eval_all(p_env, args)))
-        elif isinstance(self.params, Symbol):
-            dct = {self.params.str: eval_all(p_env, args)}
-        elif self.params == emptyList:
-            dct = {}
-        else:
-            raise ValueError('Fexpr: unknown parameter type')
-        
-        res = eval_all_ret_last(Cons(dct, env), self.body)
-        return res
-     
-    def scheme_repr(self):
-        return "{DynamicFunction}"
+        if evaluate == None: evaluate = self.type == 'dyn-lambda'
+       
+        if evaluate:
+            args = eval_all(p_env, args)
 
-
-# Dynamically scoped F expression
-class Fexpr:
-    def __init__(self, params, body):
-        self.params, self.body = params, body
-    def __call__(self, env, _, args):
-        
         if isinstance(self.params, Cons):
             dct = dict(zip(map(lambda sym: sym.str, self.params), args))
         elif isinstance(self.params, Symbol):
@@ -157,28 +150,38 @@ class Fexpr:
         elif self.params == emptyList:
             dct = {}
         else:
-            raise ValueError('Fexpr: unknown parameter type')
-
+            raise ValueError('SchemeCallable: unknown parameter type')
+         
+        stack_trace.append(self.scheme_repr())
         res = eval_all_ret_last(Cons(dct, env), self.body)
+        stack_trace.pop()
         return res
-    
+     
     def scheme_repr(self):
-        return "{FunctionalExpression}"
+        if self.name != None:
+            return "{%s %s}" % (self.type, self.name)
+        else:
+            return "{%s}" % (self.type)
 
 def scheme_repr(val):
-    if isinstance(val, bool):
+    ii = isinstance
+    normal_fun = callable(val) and not (ii(val, SchemeCallable) or ii(val, PythonCallable))
+    
+    if ii(val, bool):
         return "#t" if val else "#f"
-    elif isinstance(val, float) or isinstance(val, int):
+    elif ii(val, float) or ii(val, int):
         return str(val)
-    elif isinstance(val, list):
-        inner = map(scheme_repr, self)
+    elif ii(val, list):
+        inner = map(scheme_repr, val)
         return "#(" + " ".join(inner) + ")"
-    elif isinstance(val, str):
+    elif ii(val, str):
         return '"' + repr(val)[1:-1] + '"'
-    elif isinstance(val, dict):
-        return "{HashTable (%d)}" % len(self)
+    elif ii(val, dict):
+        return "{HashTable (%d)}" % len(val)
     elif val == None:
         return 'None'
+    elif normal_fun:
+        return "{PythonCallable %s}" % val.__name__
     else:
         return val.scheme_repr()
 
@@ -261,7 +264,7 @@ simple_datum = boolean ^ number ^ string_ ^ symbol
 @generate
 def list_():
     yield string('(')
-    es = yield many(datum << ignore)
+    es = yield many(ignore >> datum << ignore)
     yield string(')')
     return Cons.from_iterator(es)
 
@@ -288,21 +291,17 @@ compound_datum = list_ ^ vector ^ abbreviation
 datum = simple_datum ^ compound_datum
 datums = many(ignore >> datum << ignore)
 
-###################### Environment
 
-# Control flow primitives
-
-def eval_(env, p_env, args):
-    return eval(env, eval(p_env, args[0]))
-
-def fexpr(env, _, args):
-    return Fexpr(args.car(), args.cdr())
-
-def dyn_lambda(env, _, args):
-    return DynFunction(args.car(), args.cdr())
+################### Environment
 
 def define(env, p_env, args):
-    env.car()[args.car().str] = eval(p_env, args.cdr().car())
+    val = eval(p_env, args.cdr().car())
+    name = args.car().str
+    
+    if isinstance(val, SchemeCallable):
+        val.name = name
+    
+    env.car()[name] = val
 
 def set(env, p_env, args):
     to_set = eval(p_env, args.cdr().car())
@@ -323,14 +322,6 @@ def if_(env, _, args):
     else:
         return False
 
-def equal(_, p_env, args):
-    return eval(p_env, args.car()) == eval(p_env, args[1])
-
-def apply_(env, p_env, args):
-    f = eval(p_env, args.car())
-    lst = eval(p_env, args.cdr().car())
-    return f(env, p_env, lst)
-    
 def quasiquote_cons(env, p_env, cons):
 
     for val in cons:
@@ -351,90 +342,95 @@ def quasiquote(env, p_env, args, is_list = True):
     else:
         return a 
 
-# Data structure primitives 
-
 def map_(env, p_env, args):
-    f = eval(p_env, args.car())
-    lst = eval(p_env, args.cdr().car())
+    f = args.car()
+    lst = args.cdr().car()
     return lst.map(lambda e: f(env, p_env, e))
 
 def new_global_env():
+    PC = PythonCallable
+    SC = SchemeCallable
+    
+    # Simple callable
+    s_c = lambda fn: PythonCallable(lambda env, p_env, args: fn(*args), True)
+     
     return Cons({
     # Control flow primitives
     
-    'eval': eval_,
-    'fexpr': fexpr,
-    'dyn-lambda': dyn_lambda,
-    'define': define,
-    'set!': set,
-    'if': if_,
-    'equal?': equal,
-    'exit': BuiltinFunction(exit),
+    'eval': PC(lambda env, p_env, args: eval(env, args.car()), True),
+    'fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'fexpr'), False),
+    'dyn-lambda': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'dyn-lambda'), False),
+    'define': PC(define, False),
+    'set!': PC(set, False),
+    'if': PC(if_, False),
+    'equal?': s_c(op.eq),
+    'exit': s_c(exit),
     
-    'quasiquote': quasiquote,
-    'quote': lambda env,p_env,args: args.car(),
-    'apply': apply_,
-        
+    'quasiquote': PC(quasiquote, False),
+    'quote': PC(lambda env, p_env, args: args.car(), False),
+    'apply': PC(lambda env, p_env, args: args.car()(env, p_env, args[1], evaluate=False), True),
+     
     # Data structure primitives
 
     # Number
-    '+': BuiltinFunction(lambda *args: reduce(op.add, args, 0)),
-    '-': BuiltinFunction(op.sub),
-    '*': BuiltinFunction(lambda *args: reduce(op.mul, args, 1)),
-    '>': BuiltinFunction(op.gt),
-    '<': BuiltinFunction(op.lt),
-    '>=': BuiltinFunction(op.ge),
-    '<=': BuiltinFunction(op.le),
-    '=': BuiltinFunction(op.eq),
+    '+': s_c(lambda *args: reduce(op.add, args, 0)),
+    '-': s_c(op.sub),
+    '*': s_c(lambda *args: reduce(op.mul, args, 1)),
+    '>': s_c(op.gt),
+    '<': s_c(op.lt),
+    '>=': s_c(op.ge),
+    '<=': s_c(op.le),
+    '=': s_c(op.eq),
     
     # Boolean
-    'not': BuiltinFunction(lambda b: not b),
-    'boolean?': BuiltinFunction(lambda b: isinstance(b, bool)),
-    'and': BuiltinFunction(lambda *b: reduce(op.and_, b, True)),
-    'or': BuiltinFunction(lambda *b: reduce(op.or_, b, False)),
+    'not': s_c(lambda b: not b),
+    'boolean?': s_c(lambda b: isinstance(b, bool)),
+    'and': s_c(lambda *b: reduce(op.and_, b, True)),
+    'or': s_c(lambda *b: reduce(op.or_, b, False)),
     
     # Hash table
-    'make-hash-table': BuiltinFunction(lambda: {}),
-    'hash-table?': BuiltinFunction(lambda h: isinstance(h, dict)),
-    'hash-table-keys': BuiltinFunction(lambda h: Cons.from_iterator(h.keys())),
-    'hash-table-values': BuiltinFunction(lambda h: Cons.from_iterator(h.values())),
-    'hash-table-ref': BuiltinFunction(lambda h, k: h[k.str]),
-    'hash-table-exists?': BuiltinFunction(lambda h, k: k.str in h),
-    'hash-table-set!': BuiltinFunction(lambda h, k, v: h.__setitem__(k.str, v)),
+    'make-hash-table': s_c(lambda: {}),
+    'hash-table?': s_c(lambda h: isinstance(h, dict)),
+    'hash-table-keys': s_c(lambda h: Cons.from_iterator(h.keys())),
+    'hash-table-values': s_c(lambda h: Cons.from_iterator(h.values())),
+    'hash-table-ref': s_c(lambda h, k: h[k.str]),
+    'hash-table-exists?': s_c(lambda h, k: k.str in h),
+    'hash-table-set!': s_c(lambda h, k, v: h.__setitem__(k.str, v)),
     
     # List
-    'pair?': BuiltinFunction(lambda c: isinstance(c, Cons)),
-    'cons': BuiltinFunction(lambda a, b: Cons(a, b)),
-    'car': BuiltinFunction(lambda x: x.car()),
-    'cdr': BuiltinFunction(lambda x: x.cdr()),
-    'null?': BuiltinFunction(lambda l: l == emptyList),
-    'list': BuiltinFunction(lambda *elms: Cons.from_iterator(elms)),
-    'length': BuiltinFunction(lambda l: len(l)),
-    'list->vector': BuiltinFunction(lambda l: list(l)),
-    'map': map_,
+    'pair?': s_c(lambda c: isinstance(c, Cons)),
+    'cons': s_c(lambda a, b: Cons(a, b)),
+    'car': s_c(lambda x: x.car()),
+    'cdr': s_c(lambda x: x.cdr()),
+    'null?': s_c(lambda l: l == emptyList),
+    'list': s_c(lambda *elms: Cons.from_iterator(elms)),
+    'length': s_c(lambda l: len(l)),
+    'list->vector': s_c(lambda l: list(l)),
+    'map': PC(map_, True),
+
 
     # Vector
-    'vector?': BuiltinFunction(lambda x: isinstance(x, list)),
-    'make-vector': BuiltinFunction(lambda x=None: []),
-    'vector': BuiltinFunction(lambda *it: list(it)),
-    'vector-length': BuiltinFunction(lambda v: len(v)),
-    'vector-ref': BuiltinFunction(lambda v, k: v[int(k)]),
-    'vector-set!': BuiltinFunction(lambda v, k, val: v.__setitem__(int(k), val)),
-    'vector->list': BuiltinFunction(lambda v: Cons.from_iterator(v)),
-    'vector-append': BuiltinFunction(lambda v, *args: v + list(args)),
+    'vector?': s_c(lambda x: isinstance(x, list)),
+    'make-vector': s_c(lambda x=None: []),
+    'vector': s_c(lambda *it: list(it)),
+    'vector-length': s_c(lambda v: len(v)),
+    'vector-ref': s_c(lambda v, k: v[int(k)]),
+    'vector-set!': s_c(lambda v, k, val: v.__setitem__(int(k), val)),
+    'vector->list': s_c(lambda v: Cons.from_iterator(v)),
+    'vector-append': s_c(lambda v, *args: v + list(args)),
     
     # String
-    'string?': BuiltinFunction(lambda s: isinstance(s, str)),
-    'string-length': BuiltinFunction(lambda s: len(s)),
-    'string-ref': BuiltinFunction(lambda s, k: s[int(k)]),
-    'string-append': BuiltinFunction(lambda *s: reduce(op.add, s, '')),
-    'string-join': BuiltinFunction(lambda sep, s: sep.join(s)),
-    'string->symbol': BuiltinFunction(lambda s: Symbol(s)),
+    'string?': s_c(lambda s: isinstance(s, str)),
+    'string-length': s_c(lambda s: len(s)),
+    'string-ref': s_c(lambda s, k: s[int(k)]),
+    'string-append': s_c(lambda *s: reduce(op.add, s, '')),
+    'string-join': s_c(lambda sep, s: sep.join(s)),
+    'string->symbol': s_c(lambda s: Symbol(s)),
     
     # Symbol
-    'symbol->string': BuiltinFunction(lambda sym: sym.str),
+    'symbol->string': s_c(lambda sym: sym.str),
      
-    'write': BuiltinFunction(lambda *args: print(*args))
+    'write': s_c(lambda *args: print(*[scheme_repr(a) for a in args]))
     }, emptyList)
 
 def value_of_symbol(env, sym):
@@ -451,7 +447,7 @@ def value_of_symbol(env, sym):
 def eval_all(env, it):
     return Cons.from_iterator(map(lambda e: eval(env, e), it))
 
-# Eval all, return last
+# Eval all, return 
 def eval_all_ret_last(env, it):
     return reduce(lambda _, e: eval(env, e), it, None)
 
@@ -467,23 +463,30 @@ def eval(env, expr):
         return expr 
     else: # It's a list
         fst = eval(env, expr.car())
-         
+          
         if isinstance(fst, Cons):
             callble = fst.car()
             new_env = fst.cdr()
             return callble(new_env, env, expr.cdr())
-         
+        
         return fst(env, env, expr.cdr())
 
 def eval_string(str_):
     return eval(new_global_env(), datum.parse_strict(str_))
 
 def read_execute_file(env, file_name):
-    with open(file_name, 'r') as fd:
-        content = fd.read()
-        exprs = datums.parse_strict(content)
-        for e in exprs:
-            eval(env, e)
+    global stack_trace
+    try:
+        with open(file_name, 'r') as fd:
+            content = fd.read()
+            exprs = datums.parse_strict(content)
+            for e in exprs:
+                eval(env, e)
+    except Exception as e:
+        print('EXCEPTION: \t', e)
+        print('SCHEME TRACE: ', stack_trace)
+        stack_trace = []
+        raise
 
 def setup_repl_history():
     try:
@@ -498,6 +501,8 @@ def setup_repl_history():
 
 # Read-Eval-Print
 def rep(env):
+    global stack_trace
+    
     try:
         i = input("> ")
         print("Input: \t\t", i.__repr__())
@@ -506,10 +511,12 @@ def rep(env):
         print("Evaluated: \t", scheme_repr(eval(env, expr)))
     except Exception as e:
         print('\nEXCEPTION: \t', e)
+        print('SCHEME TRACE: \t', stack_trace)
+        stack_trace = []
         last = traceback.format_tb(e.__traceback__)[-1]
         print('\n', last)
         env.car()['*trace*'] = traceback.format_exc()
-        print('Use (write *trace*) to see entire stack trace')
+        print('Use (write *trace*) to see Python entire stack trace')
 
 def on_file_modify(file_name, callback):
     obs = Observer()
@@ -524,6 +531,7 @@ if __name__ == '__main__':
     reload = False
     
     def reset():
+        global env
         print('\nInput file has been changed. Reloading.')
         env = new_global_env()
         read_execute_file(env, sys.argv[1])
@@ -552,6 +560,3 @@ if __name__ == '__main__':
             reload = False
         rep(env)
 
-
-
-    
