@@ -116,8 +116,10 @@ class Cons(cabc.Sequence):
 
 class PythonCallable:
     def __init__(self, fn, evaluate):
-        self.fn, self.evaluate = fn, evaluate
-
+        self.fn = fn
+        self.evaluate = evaluate
+        self.name = fn.__name__
+    
     def __call__(self, env, p_env, args, evaluate=None):
         global stack_trace
         
@@ -130,7 +132,7 @@ class PythonCallable:
         return res
     
     def scheme_repr(self):
-        return "{BultinFunction %s}" % self.fn.__name__
+        return "{BultinFunction %s}" % self.name
 
 # Dynamically scoped function
 class SchemeCallable:
@@ -180,8 +182,6 @@ def scheme_repr(val):
         return "{HashTable (%d)}" % len(val)
     elif val == None:
         return 'None'
-    elif normal_fun:
-        return "{PythonCallable %s}" % val.__name__
     else:
         return val.scheme_repr()
 
@@ -298,7 +298,8 @@ def define(env, p_env, args):
     val = eval(p_env, args.cdr().car())
     name = args.car().str
     
-    if isinstance(val, SchemeCallable):
+    if isinstance(val, SchemeCallable) \
+            or isinstance(val, PythonCallable):
         val.name = name
     
     env.car()[name] = val
@@ -342,6 +343,22 @@ def quasiquote(env, p_env, args, is_list = True):
     else:
         return a 
 
+def let(env, p_env, args):
+    dict = {}
+     
+    for (symbol, expr) in args.car():
+        dict[symbol.str] = eval(p_env, expr)
+    
+    return eval_all_ret_last(Cons(dict, env), args.cdr())
+
+def let_star(env, p_env, args):
+    dict = {}
+    p_env = Cons(dict, p_env)
+    for (symbol, expr) in args.car():
+        dict[symbol.str] = eval(p_env, expr)
+
+    return eval_all_ret_last(Cons(dict, env), args.cdr())
+
 def map_(env, p_env, args):
     f = args.car()
     lst = args.cdr().car()
@@ -354,9 +371,9 @@ def new_global_env():
     # Simple callable
     s_c = lambda fn: PythonCallable(lambda env, p_env, args: fn(*args), True)
      
-    return Cons({
+    env = Cons({
+
     # Control flow primitives
-    
     'eval': PC(lambda env, p_env, args: eval(env, args.car()), True),
     'fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'fexpr'), False),
     'dyn-lambda': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'dyn-lambda'), False),
@@ -369,6 +386,9 @@ def new_global_env():
     'quasiquote': PC(quasiquote, False),
     'quote': PC(lambda env, p_env, args: args.car(), False),
     'apply': PC(lambda env, p_env, args: args.car()(env, p_env, args[1], evaluate=False), True),
+
+    'let': PC(let, False),
+    'let*': PC(let_star, False),
      
     # Data structure primitives
 
@@ -433,6 +453,11 @@ def new_global_env():
     'write': s_c(lambda *args: print(*[scheme_repr(a) for a in args]))
     }, emptyList)
 
+    for key, val in env.car().items():
+        val.name = key
+
+    return env
+
 def value_of_symbol(env, sym):
     while True:
         if env == emptyList:
@@ -463,6 +488,7 @@ def eval(env, expr):
         return expr 
     else: # It's a list
         fst = eval(env, expr.car())
+        
           
         if isinstance(fst, Cons):
             callble = fst.car()
@@ -516,7 +542,7 @@ def rep(env):
         last = traceback.format_tb(e.__traceback__)[-1]
         print('\n', last)
         env.car()['*trace*'] = traceback.format_exc()
-        print('Use (write *trace*) to see Python entire stack trace')
+        print('Use (write *trace*) to see entire Python stack trace')
 
 def on_file_modify(file_name, callback):
     obs = Observer()
