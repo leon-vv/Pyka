@@ -359,6 +359,31 @@ def quasiquote(env, p_env, args, is_list = True):
     else:
         return a 
 
+def do(env, p_env, args):
+    dct = {}
+    
+    for b in args.car():
+        dct[b.car().str] = eval(p_env, b.cdr().car()) # init
+    
+    test = args.cdr().car()
+    
+    while not eval(Cons(dct, p_env), test.car()):
+        for c in args.cdr().cdr():
+            eval(Cons(dct, env), c) # Todo: env or p_env?
+         
+        vals = []
+        
+        # Make step
+        for b in args.car():
+            if b.cdr().cdr() != emptyList:
+                vals.append((b.car().str,
+                             eval(Cons(dct, p_env), b[2])))
+        
+        # Update binding
+        for name,val in vals: dct[name] = val
+    
+    return reduce(lambda _, e: eval(Cons(dct, env), e), test.cdr(), False)
+
 def let(env, p_env, args):
     dict = {}
      
@@ -402,6 +427,7 @@ def new_global_env():
     'equal?': s_c(op.eq),
     'exit': s_c(exit),
     
+    'do': PC(do, False),
     'quasiquote': PC(quasiquote, False),
     'quote': PC(lambda env, p_env, args: args.car(), False),
     'apply': PC(lambda env, p_env, args: args.car()(env, p_env, args[1], evaluate=False), True),
