@@ -15,6 +15,8 @@ from watchdog.events import PatternMatchingEventHandler
 from functools import reduce
 from parsec import *
 
+################### Global variables
+
 DEBUG = False
 stack_trace = []
 
@@ -407,6 +409,39 @@ def map_(env, p_env, args):
 
 def write_(*args):
     print(*[a if isinstance(a, str) else scheme_repr(a) for a in args])
+    return True
+
+
+# Simple implementation of continuations using Exceptions
+# Note: this implementation does NOT support continuations
+# that escape the call/cc function
+
+class ResumeFromContinuation(Exception):
+    def __init__(self, val, id_):
+        self.val = val
+        self.id = id_
+
+continuation_id = 0
+
+def call_cc(env, p_env, args):
+
+    global continuation_id
+    id_ = continuation_id
+    continuation_id += 1
+     
+    def raise_(env, p_env, args=emptyList):
+        val = args.car() if args != emptyList else False
+        raise ResumeFromContinuation(val, id_)
+      
+    continuation = PythonCallable(raise_, True)
+        
+    try:
+        return args.car()(env, p_env, Cons(continuation, emptyList))
+    except ResumeFromContinuation as r:
+        if r == id_:
+            return r.val
+        else:
+            raise
 
 def new_global_env():
     PC = PythonCallable
@@ -426,7 +461,9 @@ def new_global_env():
     'if': PC(if_, False),
     'equal?': s_c(op.eq),
     'exit': s_c(exit),
-    
+    'call-with-current-continuation': PC(call_cc, True),
+    'call/cc': PC(call_cc, True),
+     
     'do': PC(do, False),
     'quasiquote': PC(quasiquote, False),
     'quote': PC(lambda env, p_env, args: args.car(), False),
@@ -608,7 +645,7 @@ if __name__ == '__main__':
     
     def reset():
         global env
-        print('\nInput file has been changed. Reloading.')
+        print('\nInput file changed. Reloading.')
         env = new_global_env()
         read_execute_file(env, sys.argv[1])
     
