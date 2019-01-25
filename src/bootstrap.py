@@ -437,7 +437,11 @@ def new_global_env():
      
     # Data structure primitives
 
+    # Procedures
+    'procedure?': s_c(lambda p: isinstance(p, PC) or isinstance(p, SC)),
+    
     # Number
+    'number?': s_c(lambda n: isinstance(n, float)),
     '+': s_c(lambda *args: reduce(op.add, args, 0)),
     '-': s_c(op.sub),
     '*': s_c(lambda *args: reduce(op.mul, args, 1)),
@@ -476,7 +480,7 @@ def new_global_env():
 
     # Vector
     'vector?': s_c(lambda x: isinstance(x, list)),
-    'make-vector': s_c(lambda x=None: []),
+    'make-vector': s_c(lambda k=0,fill=0: [fill]*int(k)),
     'vector': s_c(lambda *it: list(it)),
     'vector-length': s_c(lambda v: len(v)),
     'vector-ref': s_c(lambda v, k: v[int(k)]),
@@ -493,6 +497,7 @@ def new_global_env():
     'string->symbol': s_c(lambda s: Symbol(s)),
     
     # Symbol
+    'symbol?': s_c(lambda s: isinstance(s, Symbol)),
     'symbol->string': s_c(lambda sym: sym.str),
      
     'write': s_c(write_)
