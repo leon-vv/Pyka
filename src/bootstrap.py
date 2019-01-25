@@ -142,11 +142,21 @@ class SchemeCallable:
          
         if evaluate == None: evaluate = self.type == 'dyn-lambda'
        
-        if evaluate:
-            args = eval_all(p_env, args)
+        if evaluate: args = eval_all(p_env, args)
 
         if isinstance(self.params, Cons):
-            dct = dict(zip(map(lambda sym: sym.str, self.params), args))
+            dct = {}
+            args_pointer = args
+            parms_pointer = self.params
+            
+            while isinstance(parms_pointer, Cons):
+                dct[parms_pointer.car().str] = args_pointer.car()
+                parms_pointer = parms_pointer.cdr()
+                args_pointer = args_pointer.cdr()
+             
+            if parms_pointer != emptyList:
+                dct[parms_pointer.str] = args_pointer
+        
         elif isinstance(self.params, Symbol):
             dct = {self.params.str: args}
         elif self.params == emptyList:
@@ -187,7 +197,6 @@ def scheme_repr(val):
 
 #################### Parsers
 
-# ignore cases.
 @generate
 def comment():
     yield string(';')
@@ -196,7 +205,7 @@ def comment():
     yield string('\n') ^ string('')
 
 @generate
-def block_comment():
+def block_comment(): # Properly nested (hence, 'count')
     yield string('#|')
     count = 1
     while count > 0:
@@ -264,9 +273,16 @@ simple_datum = boolean ^ number ^ string_ ^ symbol
 @generate
 def list_():
     yield string('(')
-    es = yield many(ignore >> datum << ignore)
-    yield string(')')
-    return Cons.from_iterator(es)
+    datum_ignore = ignore >> datum << ignore
+    es = yield many(datum_ignore)
+    point_or_paren = yield (string(')') | string('.'))
+    if point_or_paren == '.':
+        last = yield datum_ignore
+        yield string(')')
+        es.append(last)
+        return Cons.from_iterator(es, return_list=False)
+    else:
+        return Cons.from_iterator(es)
 
 @generate
 def vector():
