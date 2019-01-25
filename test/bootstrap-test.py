@@ -72,6 +72,17 @@ class SchemeTest(unittest.TestCase):
         self.eval_test("(apply + '())", 0)
         self.eval_test("(apply length '( (1 2 3) ))", 3)
 
+    def test_from_iterator(self):
+        self.assertEqual(Cons.from_iterator([1,2]),
+                Cons(1, Cons(2, emptyList)))        
+
+        self.assertEqual(Cons.from_iterator([]), emptyList)
+        self.assertEqual(Cons.from_iterator([1]), Cons(1, emptyList))
+
+        self.assertEqual(Cons.from_iterator([1,2,3], return_list=False),
+                Cons(1, Cons(2, 3)))
+        self.assertEqual(Cons.from_iterator([2, 10], return_list=False),
+                Cons(2, 10))
  
 if __name__ == '__main__':
     unittest.main()
