@@ -4,6 +4,7 @@ import math
 import pprint
 import traceback
 import os
+from io import TextIOWrapper
 import atexit
 import readline
 import operator as op
@@ -18,7 +19,12 @@ from parsec import *
 ################### Global variables
 
 DEBUG = False
+
 stack_trace = []
+
+current_input_port = sys.stdin
+current_error_port = sys.stderr
+current_output_port = sys.stdout
 
 ################### Data types
 
@@ -313,11 +319,22 @@ datums = many(ignore >> datum << ignore)
 ################### Environment
 
 def define(env, p_env, args):
-    val = eval(p_env, args.cdr().car())
-    name = args.car().str
+    first = args.car()
+
+    if isinstance(first, Symbol):
+
+        val = eval(p_env, args.cdr().car())
+        name = first.str
     
-    if isinstance(val, SchemeCallable) \
-            or isinstance(val, PythonCallable):
+        if isinstance(val, SchemeCallable) \
+                or isinstance(val, PythonCallable):
+            val.name = name # Better stack trace
+        
+    elif isinstance(first, Cons):
+        name = first.car().str
+        formals = first.cdr()
+        body = args.cdr()
+        val = eval(Cons(Symbol('lambda'), Cons(formals, body)))
         val.name = name
     
     env.car()[name] = val
@@ -407,10 +424,37 @@ def map_(env, p_env, args):
     lst = args.cdr().car()
     return lst.map(lambda e: f(env, p_env, e))
 
-def write_(*args):
-    print(*[a if isinstance(a, str) else scheme_repr(a) for a in args])
-    return True
+def call_with_port(env, p_env, port, proc):
+    proc(env, p_env, Cons(port, emptyList))
+    port.close()
 
+def call_with_input_file(env, p_env, file_name, proc):
+    proc = open(file_name, 'r')
+    call_with_port(env, p_env, port, proc)
+
+def call_with_output_file(env, p_env, file_name, proc):
+    proc = open(file_name, 'w')
+    call_with_port(env, p_env, port, proc)
+
+def with_input_from_file(env, p_env, file_name, proc):
+    global current_input_port
+    tmp = current_input_port
+    current_input_port = open(file_name, 'r')
+    proc(env, p_env)
+    current_input_port.close()
+    current_input_port = tmp
+
+def with_output_to_file(env, p_env, file_name, proc):
+    global current_input_port
+    tmp = current_input_port
+    current_input_port = open(file_name, 'r')
+    proc(env, p_env)
+    current_input_port.close()
+    current_input_port = tmp
+
+def read_all(port=current_input_port):
+    content = port.read()
+    return Cons.from_iterator(datums.parse_strict(content))
 
 # Simple implementation of continuations using Exceptions
 # Note: this implementation does NOT support continuations
@@ -537,7 +581,30 @@ def new_global_env():
     'symbol?': s_c(lambda s: isinstance(s, Symbol)),
     'symbol->string': s_c(lambda sym: sym.str),
      
-    'write': s_c(write_)
+    # Port
+    'call-with-port': PC(call_with_port, True),
+    'call-with-input-file': PC(call_with_input_file, True),
+    'call-with-output-file': PC(call_with_output_file, True),
+    'with-input-from-file': PC(with_input_from_file, True),
+    'with-output-to-file': PC(with_output_to_file, True),
+    'read-all': s_c(read_all),
+
+    'input-port?': s_c(lambda p: isinstance(p, TextIOWrapper) and p.readable()),
+    'output-port?': s_c(lambda p: isinstance(p, TextIOWrapper) and p.writable()),
+    'port?': s_c(lambda p: isinstance(p, io.FileIO)),
+    'input-port-open?': s_c(lambda p: not p.closed),
+    'output-port-open?': s_c(lambda p: not p.closed),
+    'current-input-port': s_c(lambda: current_input_port),
+    'current-output-port': s_c(lambda: current_output_port),
+    'current-error-port': s_c(lambda: current_error_port),
+    'open-input-file': s_c(lambda name: open(name, 'r')),
+    'open-output-file': s_c(lambda name: open(name, 'w')),
+    'close-port': s_c(lambda p: p.close()),
+     
+    'write': s_c(lambda val, port=current_output_port: port.write(scheme_repr(val))),
+    'newline': s_c(lambda port=current_output_port: port.write('\n')),
+    'write-string': s_c(lambda s, port=current_output_port: port.write(s))
+
     }, emptyList)
 
     for key, val in env.car().items():
