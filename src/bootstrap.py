@@ -57,7 +57,7 @@ class Cons(cabc.Sequence):
             raise ValueError('Cannot return pair with less than two values')
         elif not return_list:
             x = Cons(l[i - 1], l[i])
-            i -= 1
+            i -= 2
         
         while i >= 0:
             x = Cons(l[i], x)
