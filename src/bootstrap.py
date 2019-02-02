@@ -18,10 +18,6 @@ from parsec import *
 
 ################### Global variables
 
-DEBUG = False
-
-stack_trace = []
-
 current_input_port = sys.stdin
 current_error_port = sys.stderr
 current_output_port = sys.stdout
@@ -44,7 +40,8 @@ class Symbol:
 class EmptyList:
     def scheme_repr(self):
         return "()"
-    
+    def __len__(self):
+        return 0
     def __iter__(self):
         return iter(())
 
@@ -76,7 +73,8 @@ class Cons(cabc.Sequence):
     # Structure preserving map
     # If 'self' is a pair, a pair will be returned
     def map(self, fun):
-        return Cons.from_iterator(self, fun, return_list=self.is_list)
+        return Cons.from_iterator(map(fun, self),
+                return_list=self.is_list)
      
     def car(self):
         return self.tup[0]
@@ -129,15 +127,10 @@ class PythonCallable:
         self.name = fn.__name__
     
     def __call__(self, env, p_env, args, evaluate=None):
-        global stack_trace
-        
         if evaluate == None: evaluate = self.evaluate
         if evaluate: args = eval_all(p_env, args)
-         
-        stack_trace.append(self.scheme_repr())
-        res = self.fn(env, p_env, args)
-        stack_trace.pop()
-        return res
+              
+        return self.fn(env, p_env, args)
     
     def scheme_repr(self):
         return "{BultinFunction %s}" % self.name
@@ -172,10 +165,7 @@ class SchemeCallable:
         else:
             raise ValueError('SchemeCallable: unknown parameter type')
          
-        stack_trace.append(self.scheme_repr())
-        res = eval_all_ret_last(Cons(dct, env), self.body)
-        stack_trace.pop()
-        return res
+        return eval_all_ret_last(Cons(dct, env), self.body)
      
     def scheme_repr(self):
         if self.name != None:
@@ -280,7 +270,9 @@ simple_datum = boolean ^ number ^ string_ ^ symbol
 
 @generate
 def list_():
-    yield string('(')
+    res = yield mark(string('('))
+    line = res[0][0]
+     
     datum_ignore = ignore >> datum << ignore
     es = yield many(datum_ignore)
     point_or_paren = yield (string(')') | string('.'))
@@ -288,9 +280,12 @@ def list_():
         last = yield datum_ignore
         yield string(')')
         es.append(last)
-        return Cons.from_iterator(es, return_list=False)
+        c = Cons.from_iterator(es, return_list=False)
     else:
-        return Cons.from_iterator(es)
+        c = Cons.from_iterator(es)
+
+    c.line = line
+    return c
 
 @generate
 def vector():
@@ -318,6 +313,10 @@ datums = many(ignore >> datum << ignore)
 
 ################### Environment
 
+# Print debug
+def printd(val):
+    print(scheme_repr(val))
+
 def define(env, p_env, args):
     first = args.car()
 
@@ -334,7 +333,7 @@ def define(env, p_env, args):
         name = first.car().str
         formals = first.cdr()
         body = args.cdr()
-        val = eval(Cons(Symbol('lambda'), Cons(formals, body)))
+        val = eval(env, Cons(Symbol('lambda'), Cons(formals, body)))
         val.name = name
     
     env.car()[name] = val
@@ -357,26 +356,6 @@ def if_(env, _, args):
         return eval(env, cddr.car())
     else:
         return False
-
-def quasiquote_cons(env, p_env, cons):
-
-    for val in cons:
-        if isinstance(val, Cons) and val.car() == Symbol('unquote-splicing'):
-            yield from eval(env, val.cdr().car())
-        else:
-            yield quasiquote(env, p_env, val, is_list = False)
-
-def quasiquote(env, p_env, args, is_list = True):
-    a = args.car() if is_list else args
-
-    if isinstance(a, Cons) and a.car() == Symbol('unquote'):
-        return eval(env, a.cdr().car())
-    elif isinstance(a, Cons):
-        return Cons.from_iterator(
-                quasiquote_cons(env, p_env, a),
-                return_list=a.is_list)
-    else:
-        return a 
 
 def do(env, p_env, args):
     dct = {}
@@ -422,7 +401,8 @@ def let_star(env, p_env, args):
 def map_(env, p_env, args):
     f = args.car()
     lst = args.cdr().car()
-    return lst.map(lambda e: f(env, p_env, e))
+    if lst == emptyList: return emptyList
+    return lst.map(lambda e: f(env, p_env, Cons(e, emptyList), evaluate=False))
 
 def call_with_port(env, p_env, port, proc):
     proc(env, p_env, Cons(port, emptyList))
@@ -455,6 +435,25 @@ def with_output_to_file(env, p_env, file_name, proc):
 def read_all(port=current_input_port):
     content = port.read()
     return Cons.from_iterator(datums.parse_strict(content))
+
+def load(env, p_env, file_name):
+    read_execute_file(env, file_name)
+
+def and_(env, p_env, args):
+    if args == emptyList: return True
+    first = eval(p_env, args.car())
+    if first:
+        return and_(env, p_env, args.cdr())
+    else:
+        return False
+
+def or_(env, p_env, args):
+    if args == emptyList: return False
+    first = eval(p_env, args.car())
+    if first:
+        return True
+    else:
+        return or_(env, p_env, args.cdr())
 
 # Simple implementation of continuations using Exceptions
 # Note: this implementation does NOT support continuations
@@ -492,7 +491,7 @@ def new_global_env():
     SC = SchemeCallable
     
     # Simple callable
-    s_c = lambda fn: PythonCallable(lambda env, p_env, args: fn(*args), True)
+    fn = lambda fn: PythonCallable(lambda env, p_env, args: fn(*args), True)
      
     env = Cons({
 
@@ -501,16 +500,13 @@ def new_global_env():
     'fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'fexpr'), False),
     'dyn-lambda': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'dyn-lambda'), False),
     'define': PC(define, False),
-    'set!': PC(set, False),
     'if': PC(if_, False),
-    'equal?': s_c(op.eq),
-    'exit': s_c(exit),
+    'equal?': fn(op.eq),
+    'exit': fn(exit),
     'call-with-current-continuation': PC(call_cc, True),
     'call/cc': PC(call_cc, True),
      
     'do': PC(do, False),
-    'quasiquote': PC(quasiquote, False),
-    'quote': PC(lambda env, p_env, args: args.car(), False),
     'apply': PC(lambda env, p_env, args: args.car()(env, p_env, args[1], evaluate=False), True),
 
     'let': PC(let, False),
@@ -519,67 +515,67 @@ def new_global_env():
     # Data structure primitives
 
     # Procedures
-    'procedure?': s_c(lambda p: isinstance(p, PC) or isinstance(p, SC)),
+    'procedure?': fn(lambda p: isinstance(p, PC) or isinstance(p, SC)),
     
     # Number
-    'number?': s_c(lambda n: isinstance(n, float)),
-    '+': s_c(lambda *args: reduce(op.add, args, 0)),
-    '-': s_c(op.sub),
-    '*': s_c(lambda *args: reduce(op.mul, args, 1)),
-    '>': s_c(op.gt),
-    '<': s_c(op.lt),
-    '>=': s_c(op.ge),
-    '<=': s_c(op.le),
-    '=': s_c(op.eq),
+    'number?': fn(lambda n: isinstance(n, float)),
+    '+': fn(lambda *args: reduce(op.add, args, 0)),
+    '-': fn(op.sub),
+    '*': fn(lambda *args: reduce(op.mul, args, 1)),
+    '>': fn(op.gt),
+    '<': fn(op.lt),
+    '>=': fn(op.ge),
+    '<=': fn(op.le),
+    '=': fn(op.eq),
     
     # Boolean
-    'not': s_c(lambda b: not b),
-    'boolean?': s_c(lambda b: isinstance(b, bool)),
-    'and': s_c(lambda *b: reduce(op.and_, b, True)),
-    'or': s_c(lambda *b: reduce(op.or_, b, False)),
+    'not': fn(lambda b: not b),
+    'boolean?': fn(lambda b: isinstance(b, bool)),
+    'and': PC(and_, False),
+    'or': PC(or_, False),
     
     # Hash table
-    'make-hash-table': s_c(lambda: {}),
-    'hash-table?': s_c(lambda h: isinstance(h, dict)),
-    'hash-table-keys': s_c(lambda h: Cons.from_iterator(h.keys())),
-    'hash-table-values': s_c(lambda h: Cons.from_iterator(h.values())),
-    'hash-table-ref': s_c(lambda h, k: h[k.str]),
-    'hash-table-exists?': s_c(lambda h, k: k.str in h),
-    'hash-table-set!': s_c(lambda h, k, v: h.__setitem__(k.str, v)),
+    'make-hash-table': fn(lambda: {}),
+    'hash-table?': fn(lambda h: isinstance(h, dict)),
+    'hash-table-keys': fn(lambda h: Cons.from_iterator(h.keys())),
+    'hash-table-values': fn(lambda h: Cons.from_iterator(h.values())),
+    'hash-table-ref': fn(lambda h, k: h[k.str]),
+    'hash-table-exists?': fn(lambda h, k: k.str in h),
+    'hash-table-set!': fn(lambda h, k, v: h.__setitem__(k.str, v)),
     
     # List
-    'pair?': s_c(lambda c: isinstance(c, Cons)),
-    'cons': s_c(lambda a, b: Cons(a, b)),
-    'car': s_c(lambda x: x.car()),
-    'cdr': s_c(lambda x: x.cdr()),
-    'null?': s_c(lambda l: l == emptyList),
-    'list': s_c(lambda *elms: Cons.from_iterator(elms)),
-    'length': s_c(lambda l: len(l)),
-    'list->vector': s_c(lambda l: list(l)),
+    'pair?': fn(lambda c: isinstance(c, Cons)),
+    'cons': fn(lambda a, b: Cons(a, b)),
+    'car': fn(lambda x: x.car()),
+    'cdr': fn(lambda x: x.cdr()),
+    'null?': fn(lambda l: l == emptyList),
+    'list': fn(lambda *elms: Cons.from_iterator(elms)),
+    'length': fn(lambda l: len(l)),
+    'list->vector': fn(lambda l: list(l)),
     'map': PC(map_, True),
-
-
+    
     # Vector
-    'vector?': s_c(lambda x: isinstance(x, list)),
-    'make-vector': s_c(lambda k=0,fill=0: [fill]*int(k)),
-    'vector': s_c(lambda *it: list(it)),
-    'vector-length': s_c(lambda v: len(v)),
-    'vector-ref': s_c(lambda v, k: v[int(k)]),
-    'vector-set!': s_c(lambda v, k, val: v.__setitem__(int(k), val)),
-    'vector->list': s_c(lambda v: Cons.from_iterator(v)),
-    'vector-append': s_c(lambda v, *args: v + list(args)),
+    'vector?': fn(lambda x: isinstance(x, list)),
+    'make-vector': fn(lambda k=0,fill=0: [fill]*int(k)),
+    'vector': fn(lambda *it: list(it)),
+    'vector-length': fn(lambda v: len(v)),
+    'vector-ref': fn(lambda v, k: v[int(k)]),
+    'vector-set!': fn(lambda v, k, val: v.__setitem__(int(k), val)),
+    'vector->list': fn(lambda v: Cons.from_iterator(v)),
+    'vector-append': fn(lambda v, *args: v + list(args)),
     
     # String
-    'string?': s_c(lambda s: isinstance(s, str)),
-    'string-length': s_c(lambda s: len(s)),
-    'string-ref': s_c(lambda s, k: s[int(k)]),
-    'string-append': s_c(lambda *s: reduce(op.add, s, '')),
-    'string-join': s_c(lambda sep, s: sep.join(s)),
-    'string->symbol': s_c(lambda s: Symbol(s)),
+    'string?': fn(lambda s: isinstance(s, str)),
+    'string-length': fn(lambda s: len(s)),
+    'string-ref': fn(lambda s, k: s[int(k)]),
+    'string-append': fn(lambda *s: reduce(op.add, s, '')),
+    'string-join': fn(lambda sep, s: sep.join(s)),
+    'string->symbol': fn(lambda s: Symbol(s)),
+    'any->string': fn(lambda v: scheme_repr(v)),
     
     # Symbol
-    'symbol?': s_c(lambda s: isinstance(s, Symbol)),
-    'symbol->string': s_c(lambda sym: sym.str),
+    'symbol?': fn(lambda s: isinstance(s, Symbol)),
+    'symbol->string': fn(lambda sym: sym.str),
      
     # Port
     'call-with-port': PC(call_with_port, True),
@@ -587,23 +583,23 @@ def new_global_env():
     'call-with-output-file': PC(call_with_output_file, True),
     'with-input-from-file': PC(with_input_from_file, True),
     'with-output-to-file': PC(with_output_to_file, True),
-    'read-all': s_c(read_all),
+    'read-all': fn(read_all),
 
-    'input-port?': s_c(lambda p: isinstance(p, TextIOWrapper) and p.readable()),
-    'output-port?': s_c(lambda p: isinstance(p, TextIOWrapper) and p.writable()),
-    'port?': s_c(lambda p: isinstance(p, io.FileIO)),
-    'input-port-open?': s_c(lambda p: not p.closed),
-    'output-port-open?': s_c(lambda p: not p.closed),
-    'current-input-port': s_c(lambda: current_input_port),
-    'current-output-port': s_c(lambda: current_output_port),
-    'current-error-port': s_c(lambda: current_error_port),
-    'open-input-file': s_c(lambda name: open(name, 'r')),
-    'open-output-file': s_c(lambda name: open(name, 'w')),
-    'close-port': s_c(lambda p: p.close()),
+    'input-port?': fn(lambda p: isinstance(p, TextIOWrapper) and p.readable()),
+    'output-port?': fn(lambda p: isinstance(p, TextIOWrapper) and p.writable()),
+    'port?': fn(lambda p: isinstance(p, io.FileIO)),
+    'input-port-open?': fn(lambda p: not p.closed),
+    'output-port-open?': fn(lambda p: not p.closed),
+    'current-input-port': fn(lambda: current_input_port),
+    'current-output-port': fn(lambda: current_output_port),
+    'current-error-port': fn(lambda: current_error_port),
+    'open-input-file': fn(lambda name: open(name, 'r')),
+    'open-output-file': fn(lambda name: open(name, 'w')),
+    'close-port': fn(lambda p: p.close()),
      
-    'write': s_c(lambda val, port=current_output_port: port.write(scheme_repr(val))),
-    'newline': s_c(lambda port=current_output_port: port.write('\n')),
-    'write-string': s_c(lambda s, port=current_output_port: port.write(s))
+    'write': fn(lambda val, port=current_output_port: port.write(scheme_repr(val))),
+    'newline': fn(lambda port=current_output_port: port.write('\n')),
+    'write-string': fn(lambda s, port=current_output_port: port.write(s))
 
     }, emptyList)
 
@@ -622,40 +618,54 @@ def value_of_symbol(env, sym):
             if val != None: return val
             env = env.cdr()
 
-# Eval all, return new Cons
 def eval_all(env, it):
     return Cons.from_iterator(map(lambda e: eval(env, e), it))
 
-# Eval all, return 
 def eval_all_ret_last(env, it):
     return reduce(lambda _, e: eval(env, e), it, None)
 
-def eval(env, expr):
-    res = None
+eval_stack = []
 
+def eval(env, expr):
+    eval_stack.append(expr)
+    res = None 
+    
     if isinstance(expr, Symbol):
         if expr.str == '*environment*':
-            return env
+            res = env
         else:
-            return value_of_symbol(env, expr)
+            res = value_of_symbol(env, expr)
     elif not isinstance(expr, Cons): # Constant literal
-        return expr 
+        res = expr 
     else: # It's a list
-        fst = eval(env, expr.car())
         
+        fst = eval(env, expr.car())
           
         if isinstance(fst, Cons):
             callble = fst.car()
             new_env = fst.cdr()
-            return callble(new_env, env, expr.cdr())
-        
-        return fst(env, env, expr.cdr())
+            res = callble(new_env, env, expr.cdr())
+        else: 
+            res = fst(env, env, expr.cdr())
+    
+    eval_stack.pop()
+    return res
 
 def eval_string(str_):
     return eval(new_global_env(), datum.parse_strict(str_))
 
+def print_eval_stack():
+    global eval_stack
+
+    if len(eval_stack):
+        expr = eval_stack.pop()
+        print('EVALUATING: \t', scheme_repr(expr))
+        if hasattr(expr, 'line'):
+            print('PARSED AT: \t line ' + str(expr.line))
+
+        eval_stack = []
+
 def read_execute_file(env, file_name):
-    global stack_trace
     try:
         with open(file_name, 'r') as fd:
             content = fd.read()
@@ -664,8 +674,7 @@ def read_execute_file(env, file_name):
                 eval(env, e)
     except Exception as e:
         print('EXCEPTION: \t', e)
-        print('SCHEME TRACE: ', stack_trace)
-        stack_trace = []
+        print_eval_stack()
         raise
 
 def setup_repl_history():
@@ -681,8 +690,6 @@ def setup_repl_history():
 
 # Read-Eval-Print
 def rep(env):
-    global stack_trace
-    
     try:
         i = input("> ")
         print("Input: \t\t", i.__repr__())
@@ -691,12 +698,13 @@ def rep(env):
         print("Evaluated: \t", scheme_repr(eval(env, expr)))
     except Exception as e:
         print('\nEXCEPTION: \t', e)
-        print('SCHEME TRACE: \t', stack_trace)
-        stack_trace = []
+        
+        print_eval_stack()
+         
         last = traceback.format_tb(e.__traceback__)[-1]
         print('\n', last)
         env.car()['*trace*'] = traceback.format_exc()
-        print('Use (write *trace*) to see entire Python stack trace')
+        print('Use (write-string *trace*) to see entire Python stack trace')
 
 def on_file_modify(file_name, callback):
     obs = Observer()
@@ -715,14 +723,14 @@ if __name__ == '__main__':
         print('\nInput file changed. Reloading.')
         env = new_global_env()
         read_execute_file(env, sys.argv[1])
-    
+     
     if len(sys.argv) > 1:
          
         read_execute_file(env, sys.argv[1])
          
         def modified(e):
             global reload
-            
+             
             current_input = readline.get_line_buffer()
             if current_input == '':
                 reset()
