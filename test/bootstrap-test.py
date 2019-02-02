@@ -29,14 +29,6 @@ class SchemeTest(unittest.TestCase):
     def test_comment(self):
         self.parser_test(comment, ';  abc \n', None)
     
-    def test_quote(self):
-        self.parser_test(abbreviation,
-                "'abc",
-                [Symbol('quote'), Symbol('abc')])
-        self.parser_test(abbreviation,
-                "'(some \"list\")",
-                [Symbol('quote'), [Symbol('some'), 'list']])
-    
     def repr_test(self, data, s):
         self.assertEqual(scheme_repr(data), s)
     
@@ -68,10 +60,22 @@ class SchemeTest(unittest.TestCase):
         self.eval_test('((dyn-lambda x x) 1 2)', [1, 2])
 
     def test_apply(self):
-        self.eval_test("(apply + '(1 2 3))", 6)
-        self.eval_test("(apply + '())", 0)
-        self.eval_test("(apply length '( (1 2 3) ))", 3)
+        self.eval_test("(apply + (list 1 2 3))", 6)
+        self.eval_test("(apply + (list))", 0)
+        self.eval_test("(apply length (list (list 1 2 3)))", 3)
 
+    def test_map(self):
+        self.eval_test('(map (dyn-lambda (x) (+ x 1)) (list 1 2 3))',
+                Cons.from_iterator([2,3,4]))
+        self.eval_test('(map length (list (list 1 2) (list 3) (list)))',
+                Cons.from_iterator([2, 1, 0]))
+
+    def test_or_and(self):
+        self.eval_test('(and)', True)
+        self.eval_test('(or)', False)
+        self.eval_test('(and #f a)', False) # a not evaluated
+        self.eval_test('(or #t a)', True)
+     
     def test_from_iterator(self):
         self.assertEqual(Cons.from_iterator([1,2]),
                 Cons(1, Cons(2, emptyList)))        
