@@ -25,9 +25,10 @@ current_output_port = sys.stdout
 ################### Data types
 
 class Symbol:
-    def __init__(self, s):
+    def __init__(self, s, line=None):
         self.str = s
-
+        if line != None: self.line = line
+    
     def __eq__(self, other):
         if(isinstance(other, Symbol)):
             return self.str == other.str
@@ -49,9 +50,10 @@ emptyList = EmptyList()
 
 class Cons(cabc.Sequence):
 
-    def __init__(self, a, b):
+    def __init__(self, a, b, line=None):
         self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
         self.tup = (a, b)
+        if line != None: self.line = None
 
     def from_iterator(it, return_list=True):
         x = emptyList
@@ -253,7 +255,10 @@ def peculiar_identifier():
 
     return sign + sub + ''.join(sub_rest)
      
-symbol = (one_of('+-') ^ normal_identifier ^ peculiar_identifier).parsecmap(Symbol)
+@generate
+def symbol():
+  s = yield mark((one_of('+-') ^ normal_identifier ^ peculiar_identifier))
+  return Symbol(s[1], s[0][0])
 
 escaped_or_char = escaped_char ^ none_of('"')
 
