@@ -441,7 +441,10 @@ def read_all(port=current_input_port):
     content = port.read()
     return Cons.from_iterator(datums.parse_strict(content))
 
-def load(env, p_env, file_name):
+def load(env, _, args):
+    file_name = args.car()
+    if args.cdr() != emptyList:
+      env = args.cdr().car()
     read_execute_file(env, file_name)
 
 def and_(env, p_env, args):
@@ -510,12 +513,15 @@ def new_global_env():
     'exit': fn(exit),
     'call-with-current-continuation': PC(call_cc, True),
     'call/cc': PC(call_cc, True),
-     
+    'get-env': PC(lambda env, p_env, args: env, True),
+    
     'do': PC(do, False),
     'apply': PC(lambda env, p_env, args: args.car()(env, p_env, args[1], evaluate=False), True),
 
     'let': PC(let, False),
     'let*': PC(let_star, False),
+
+    'load': PC(load, True),
      
     # Data structure primitives
 
@@ -636,10 +642,7 @@ def eval(env, expr):
     res = None 
     
     if isinstance(expr, Symbol):
-        if expr.str == '*environment*':
-            res = env
-        else:
-            res = value_of_symbol(env, expr)
+        res = value_of_symbol(env, expr)
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # It's a list
@@ -651,6 +654,7 @@ def eval(env, expr):
             new_env = fst.cdr()
             res = callble(new_env, env, expr.cdr())
         else: 
+            printd(expr)
             res = fst(env, env, expr.cdr())
     
     eval_stack.pop()
