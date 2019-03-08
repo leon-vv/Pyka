@@ -506,7 +506,7 @@ def new_global_env():
     env = Cons({
 
     # Control flow primitives
-    'eval': PC(lambda env, p_env, args: eval(env, args.car()), True),
+    'eval': fn(lambda expr, env: eval(env, expr)),
     'fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'fexpr'), False),
     'dyn-lambda': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'dyn-lambda'), False),
     'define': PC(define, False),
