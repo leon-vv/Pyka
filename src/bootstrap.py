@@ -177,7 +177,6 @@ class SchemeCallable:
 
 def scheme_repr(val):
     ii = isinstance
-    normal_fun = callable(val) and not (ii(val, SchemeCallable) or ii(val, PythonCallable))
     
     if ii(val, bool):
         return "#t" if val else "#f"
@@ -189,7 +188,10 @@ def scheme_repr(val):
     elif ii(val, str):
         return '"' + repr(val)[1:-1] + '"'
     elif ii(val, dict):
-        return "{HashTable (%d)}" % len(val)
+        if len(val) > 3:
+          return "{HashTable (%d)}" % len(val)
+        else:
+          return str(val)
     elif val == None:
         return 'None'
     else:
