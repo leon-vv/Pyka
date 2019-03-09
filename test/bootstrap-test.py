@@ -54,10 +54,10 @@ class SchemeTest(unittest.TestCase):
         self.eval_test('(+ 10 20)', 30)
 
     def test_dyn_lambda(self):
-        self.eval_test('((dyn-lambda (x) (+ x x)) 10)', 20)
+        self.eval_test('((d-fun (x) (+ x x)) 10)', 20)
 
     def test_vararg(self):
-        self.eval_test('((dyn-lambda x x) 1 2)', [1, 2])
+        self.eval_test('((d-fun x x) 1 2)', [1, 2])
 
     def test_apply(self):
         self.eval_test("(apply + (list 1 2 3))", 6)
@@ -65,7 +65,7 @@ class SchemeTest(unittest.TestCase):
         self.eval_test("(apply length (list (list 1 2 3)))", 3)
 
     def test_map(self):
-        self.eval_test('(map (dyn-lambda (x) (+ x 1)) (list 1 2 3))',
+        self.eval_test('(map (d-fun (x) (+ x 1)) (list 1 2 3))',
                 Cons.from_iterator([2,3,4]))
         self.eval_test('(map length (list (list 1 2) (list 3) (list)))',
                 Cons.from_iterator([2, 1, 0]))
