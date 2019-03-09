@@ -558,6 +558,7 @@ def new_global_env():
     
     # List
     'pair?': fn(lambda c: isinstance(c, Cons)),
+    'list?': fn(lambda l: isinstance(c, Cons) and c.is_list),
     'cons': fn(lambda a, b: Cons(a, b)),
     'car': fn(lambda x: x.car()),
     'cdr': fn(lambda x: x.cdr()),
