@@ -326,23 +326,14 @@ def printd(val):
 
 def define(env, p_env, args):
     first = args.car()
-
-    if isinstance(first, Symbol):
-
-        val = eval(p_env, args.cdr().car())
-        name = first.str
     
-        if isinstance(val, SchemeCallable) \
-                or isinstance(val, PythonCallable):
-            val.name = name # Better stack trace
-        
-    elif isinstance(first, Cons):
-        name = first.car().str
-        formals = first.cdr()
-        body = args.cdr()
-        val = eval(env, Cons(Symbol('d-fun'), Cons(formals, body)))
-        val.name = name
+    val = eval(p_env, args.cdr().car())
+    name = first.str
     
+    if isinstance(val, SchemeCallable) \
+            or isinstance(val, PythonCallable):
+        val.name = name # Better stack trace
+     
     env.car()[name] = val
 
 def set(env, p_env, args):
