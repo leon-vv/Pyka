@@ -143,7 +143,7 @@ class SchemeCallable:
         self.params, self.body, self.type, self.name = params, body, type, None
     def __call__(self, env, p_env, args, evaluate=None):
          
-        if evaluate == None: evaluate = self.type == 'dyn-lambda'
+        if evaluate == None: evaluate = self.type == 'd-fun'
        
         if evaluate: args = eval_all(p_env, args)
 
@@ -340,7 +340,7 @@ def define(env, p_env, args):
         name = first.car().str
         formals = first.cdr()
         body = args.cdr()
-        val = eval(env, Cons(Symbol('lambda'), Cons(formals, body)))
+        val = eval(env, Cons(Symbol('d-fun'), Cons(formals, body)))
         val.name = name
     
     env.car()[name] = val
@@ -507,8 +507,8 @@ def new_global_env():
 
     # Control flow primitives
     'eval': fn(lambda expr, env: eval(env, expr)),
-    'fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'fexpr'), False),
-    'dyn-lambda': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'dyn-lambda'), False),
+    'd-fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'd-fexpr'), False),
+    'd-fun': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'd-fun'), False),
     'define': PC(define, False),
     'if': PC(if_, False),
     'equal?': fn(op.eq),
