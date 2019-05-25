@@ -53,7 +53,6 @@
   (d-fun stmts
     (last stmts)))
 
-
 (define eval-nth
 	(d-fun (expr nth)
 		(eval expr (env-ref (+ nth 1)))))
@@ -61,6 +60,38 @@
 (define eval-prev
   (d-fun (expr)
     (eval-nth expr 2)))
+
+
+(define pretty-string
+  (d-fun (val indent)
+
+    (define at-indent
+      (d-fun (indent string)
+        (string-append (make-string indent "\t") string)))
+     
+    (define pretty-list
+      (d-fun (lst indent)
+        (string-append
+          "("
+          (pretty-string (car lst) 0)  "\n"
+          (string-join
+            "\n"
+            (map 
+              (l-fun (v) (at-indent indent (pretty-string v (+ indent 1))))
+              (cdr lst)))
+          ")")))
+     
+    (define pretty-string-aux  
+      (d-fun (val indent)
+        (if (not (pair? val))
+          (any->string val)
+          (if (equal? (car val) 'unquote)
+            (string-append "," (pretty-string (car (cdr val)) (+ indent 1)))
+            (if (equal? (car val) 'unquote-splicing)
+              (string-append ",@" (pretty-string (car (cdr val)) (+ indent 1)))
+              (pretty-list val indent))))))
+
+    (at-indent indent (pretty-string-aux val indent))))
 
 (define debug
   (d-fexpr (v)
