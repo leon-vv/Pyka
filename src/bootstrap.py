@@ -71,7 +71,10 @@ class Cons(cabc.Sequence):
             i = i - 1
         
         return x
-    
+
+    def __call__(self, env, p_env, args, evaluate=None):
+        return self.car()(self.cdr(), p_env, args, evaluate) 
+     
     # Structure preserving map
     # If 'self' is a pair, a pair will be returned
     def map(self, fun):
@@ -325,16 +328,18 @@ def printd(val):
     print(scheme_repr(val))
 
 def define(env, p_env, args):
-    first = args.car()
-    
     val = eval(p_env, args.cdr().car())
-    name = first.str
+    name = args.car().str
     
     if isinstance(val, SchemeCallable) \
             or isinstance(val, PythonCallable):
         val.name = name # Better stack trace
      
     env.car()[name] = val
+
+def undefine(env, p_env, args):
+  name = args.car().str
+  env.car().pop(name, None)
 
 def set(env, p_env, args):
     to_set = eval(p_env, args.cdr().car())
@@ -343,7 +348,7 @@ def set(env, p_env, args):
         if key in ht:
             ht[key] = to_set
             return to_set
-    raise ValueError('Key to set %s is not active in the current environment' % key)
+    raise ValueError('Symbol to set %s is not active in the current environment' % key)
 
 def if_(env, _, args):
     cdr = args.cdr()
@@ -382,10 +387,10 @@ def do(env, p_env, args):
 
 def let(env, p_env, args):
     dict = {}
-     
+    
     for (symbol, expr) in args.car():
         dict[symbol.str] = eval(p_env, expr)
-    
+     
     return eval_all_ret_last(Cons(dict, env), args.cdr())
 
 def let_star(env, p_env, args):
@@ -400,6 +405,7 @@ def map_(env, p_env, args):
     f = args.car()
     lst = args.cdr().car()
     if lst == emptyList: return emptyList
+    
     return lst.map(lambda e: f(env, p_env, Cons(e, emptyList), evaluate=False))
 
 def call_with_port(env, p_env, port, proc):
@@ -501,6 +507,7 @@ def new_global_env():
     'd-fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'd-fexpr'), False),
     'd-fun': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'd-fun'), False),
     'define': PC(define, False),
+    'undefine': PC(undefine, False),
     'if': PC(if_, False),
     'equal?': fn(op.eq),
     'exit': fn(exit),
@@ -571,6 +578,7 @@ def new_global_env():
     
     # String
     'string?': fn(lambda s: isinstance(s, str)),
+    'make-string': fn(lambda k, char='~': char*int(k)),
     'string-length': fn(lambda s: len(s)),
     'string-ref': fn(lambda s, k: s[int(k)]),
     'string-append': fn(lambda *s: reduce(op.add, s, '')),
@@ -619,8 +627,10 @@ def value_of_symbol(env, sym):
             raise ValueError('Key %s could not be found in environment' % sym.str)
         else:
             dct = env.car()
-            val = dct.get(sym.str)
-            if val != None: return val
+            if sym.str in dct:
+              val = dct.get(sym.str)
+              if val != None: return val
+              else: raise ValueError('Key %s is equal to None in environment' % sym.str)
             env = env.cdr()
 
 def eval_all(env, it):
@@ -648,7 +658,6 @@ def eval(env, expr):
             new_env = fst.cdr()
             res = callble(new_env, env, expr.cdr())
         else: 
-            printd(expr)
             res = fst(env, env, expr.cdr())
     
     eval_stack.pop()
@@ -660,13 +669,12 @@ def eval_string(str_):
 def print_eval_stack():
     global eval_stack
 
-    if len(eval_stack):
-        expr = eval_stack.pop()
+    for expr in eval_stack:
         print('EVALUATING: \t', scheme_repr(expr))
         if hasattr(expr, 'line'):
-            print('PARSED AT: \t line ' + str(expr.line))
-
-        eval_stack = []
+            print('PARSED AT: \t line ' + str(expr.line) + '\n')
+  
+    eval_stack = []
 
 def read_execute_file(env, file_name):
     try:
@@ -678,7 +686,7 @@ def read_execute_file(env, file_name):
     except Exception as e:
         print('EXCEPTION: \t', e)
         print_eval_stack()
-        raise
+        #raise
 
 def setup_repl_history():
     try:
@@ -712,7 +720,7 @@ def rep(env):
 def on_file_modify(file_name, callback):
     obs = Observer()
     handler = PatternMatchingEventHandler([file_name])
-    handler.on_modified = lambda e: callback(e)
+    #handler.on_modified = lambda e: callback(e)
     obs.schedule(handler, os.path.dirname(file_name))
     obs.start()
  

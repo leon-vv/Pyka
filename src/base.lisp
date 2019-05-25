@@ -42,7 +42,6 @@
     (list-skip-n (get-env)
       (if (null? nth) 1 (+ (car nth) 1)))))
 
-   
 (define last
   (d-fun (lst)
     (if (null? (cdr lst))
@@ -101,13 +100,25 @@
              "\nResult is:\t " res "\n")
       res)))
 
+; These special definitions make sure that nested
+; unquoting works. For example in `(a b `(,c ,,d))
+; c is evaluated at the first evaluation, while d
+; is evaluated at the second evaluation.
+(define unquote
+  (d-fexpr args
+    (cons 'unquote args)))
+
+(define unquote-splicing
+  (d-fexpr args
+    (cons 'unquote-splicing args)))
+
 (define quasiquote
   (d-fexpr (val)
     
     (define quasiquote-cons-env
       (d-fun (c env)
-        (if (null? c)
-          '()
+        (if (or (null? c) (not (pair? c)))
+          c
           (let ((first (car c))
                 (rest (quasiquote-cons-env (cdr c) env)))
             (if (and (pair? first)
@@ -155,9 +166,21 @@
     (quasiquote (let (((unquote name) 10)) (unquote name))))
     '(let ((x 10)) x))
 (assert-equal
-  (let ((c 1) (env 2) (val 3))
-    `(,c ,env ,val))
+  (let ((a 1) (b 2) (c 3))
+    `(,a ,b ,c))
   '(1 2 3))
+(assert-equal
+  (let ((a 1) (b 2) (c 3))
+    `(a ,b `(,b ,,@x ,,(+ 1 ,,@y))))
+    '(a 2 (quasiquote
+            (2
+                (unquote-splicing x)
+                (unquote (+ 1 (unquote (unquote-splicing y))))))))
+(assert-equal
+    (eval 
+        `(quasiquote ,(cons 1 2))
+        (get-env))
+    (cons 1 2))
 
 (define l-fun-nth
   (d-fun (args body nth)
@@ -195,7 +218,15 @@
                 (c)
                 (c)
                 (c)) 2)
+(assert-equal 
+  (let ((x 0))
+    (map (l-fun (v) 
+            (set! x (+ x 1))
+            x)
+         '(0 0 0)))
+    '(1 2 3))
 
+    
 (define eval-all
   (d-fun (es env)
     (eval `(begin ,@es) env)))
@@ -264,8 +295,12 @@
   (d-fexpr (args . code)
     (eval-prev
       `(d-fexpr ,args
-          (eval-prev (begin ,@code))))))
+        (eval-prev (begin ,@code))))))
  
+(assert-equal
+    ((macro (x) x) (+ 1 1))
+    2)
+
 ; Let single
 (define lets
   (macro (name val . cmnds)
@@ -284,3 +319,4 @@
 (fun-shorthand def-d-fexpr d-fexpr)
 (fun-shorthand def-l-fexpr l-fexpr)
 (fun-shorthand def-macro macro)
+
