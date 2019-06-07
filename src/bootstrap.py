@@ -246,6 +246,7 @@ def number():
     n = yield regex(r'(\+|-)?(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?')
     return float(n)
 
+# See RSR7 small language specification
 initial = regex(r'[a-zA-Z]') | one_of("!$%&*/:<=>?@^_~")
 special_subsequent = one_of('+-.@')
 sign_subsequent = initial ^ one_of('+-@')
@@ -427,6 +428,12 @@ def map_(env, p_env, args):
     
     return lst.map(lambda e: f(env, p_env, Cons(e, emptyList), evaluate=False))
 
+def string_to_number(env, p_env, args):
+  try:
+    return float(args.car())
+  except ValueError:
+    return False
+
 def call_with_port(env, p_env, port, proc):
     proc(env, p_env, Cons(port, emptyList))
     port.close()
@@ -575,7 +582,7 @@ def new_global_env():
     
     # List
     'pair?': fn(lambda c: isinstance(c, Cons)),
-    'list?': fn(lambda l: isinstance(c, Cons) and c.is_list),
+    'list?': fn(lambda c: isinstance(c, Cons) and c.is_list),
     'cons': fn(lambda a, b: Cons(a, b)),
     'car': fn(lambda x: x.car()),
     'cdr': fn(lambda x: x.cdr()),
@@ -604,7 +611,9 @@ def new_global_env():
     'string-join': fn(lambda sep, s: sep.join(s)),
     'string->symbol': fn(lambda s: Symbol(s)),
     'any->string': fn(lambda v: scheme_repr(v)),
-    
+    'substring': fn(lambda s, start=0, end=None: s[int(start):None if end == None else int(end)]),
+    'string->number': PC(string_to_number, True),
+     
     # Symbol
     'symbol?': fn(lambda s: isinstance(s, Symbol)),
     'symbol->string': fn(lambda sym: sym.str),
@@ -688,12 +697,22 @@ def eval_string(str_):
 def print_eval_stack():
     global eval_stack
 
-    for expr in eval_stack:
+    for expr in [eval_stack[0]] + eval_stack[-5:]:
         print('EVALUATING: \t', scheme_repr(expr))
         if hasattr(expr, 'line'):
             print('PARSED AT: \t line ' + str(expr.line) + '\n')
   
     eval_stack = []
+
+def handle_exception(env, e):
+    print('\nEXCEPTION: \t', e)
+        
+    print_eval_stack()
+      
+    last = traceback.format_tb(e.__traceback__)[-1]
+    print('\n', last)
+    env.car()['*trace*'] = traceback.format_exc()
+    print('Use (write-string *trace*) to see entire Python stack trace')
 
 def read_execute_file(env, file_name):
     try:
@@ -703,9 +722,7 @@ def read_execute_file(env, file_name):
             for e in exprs:
                 eval(env, e)
     except Exception as e:
-        print('EXCEPTION: \t', e)
-        print_eval_stack()
-        #raise
+        handle_exception(env, e)
 
 def setup_repl_history():
     try:
@@ -727,14 +744,7 @@ def rep(env):
         print("Parsed: \t", scheme_repr(expr))
         print("Evaluated: \t", scheme_repr(eval(env, expr)))
     except Exception as e:
-        print('\nEXCEPTION: \t', e)
-        
-        print_eval_stack()
-         
-        last = traceback.format_tb(e.__traceback__)[-1]
-        print('\n', last)
-        env.car()['*trace*'] = traceback.format_exc()
-        print('Use (write-string *trace*) to see entire Python stack trace')
+        handle_exception(env, e)
 
 def on_file_modify(file_name, callback):
     obs = Observer()
