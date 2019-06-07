@@ -266,17 +266,29 @@ def peculiar_identifier():
     sub_rest = yield many(sign_subsequent)
 
     return sign + sub + ''.join(sub_rest)
-     
+
+dot_subsequent = sign_subsequent | string('.')
+
+@generate
+def peculiar_identifier_dot():
+    d = yield string('.')
+    ds = yield dot_subsequent
+    subs = yield many(subsequent)
+    return d + ds + ''.join(subs)
+
 @generate
 def symbol():
-  s = yield mark((one_of('+-') ^ normal_identifier ^ peculiar_identifier))
-  return Symbol(s[1], s[0][0])
+    s = yield mark((one_of('+-') ^
+        normal_identifier ^
+        peculiar_identifier ^
+        peculiar_identifier_dot))
+    return Symbol(s[1], s[0][0])
 
 escaped_or_char = escaped_char ^ none_of('"')
 
 # Inefficient, maybe optimize later
-string_ = (string('"') >> many(escaped_or_char) << string('"')) \
-        .parsecmap(lambda lst: ''.join(lst))
+string_ = (string('"') >> many(escaped_or_char) << string('"'))\
+    .parsecmap(lambda s: ''.join(s))
 
 boolean = (string('#true') ^ string('#t')).result(True) ^ \
             (string('#false') ^ string('#f')).result(False)
