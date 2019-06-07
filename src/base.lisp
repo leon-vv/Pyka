@@ -66,17 +66,17 @@
 
     (define at-indent
       (d-fun (indent string)
-        (string-append (make-string indent "\t") string)))
+        (string-append (make-string indent "  ") string)))
      
     (define pretty-list
       (d-fun (lst indent)
         (string-append
           "("
-          (pretty-string (car lst) 0)  "\n"
+          (pretty-string (car lst) 0) "\n"
           (string-join
             "\n"
             (map 
-              (l-fun (v) (at-indent indent (pretty-string v (+ indent 1))))
+              (d-fun (v) (at-indent indent (pretty-string v (+ indent 1))))
               (cdr lst)))
           ")")))
      
@@ -96,8 +96,8 @@
   (d-fexpr (v)
     (let ((res (eval-prev v)))
       (print "======= DEBUG ====== "
-             "\nCalled with:\t " v
-             "\nResult is:\t " res "\n")
+             "\nCalled with:\n " (pretty-string v 0)
+             "\nResult is:\n " (pretty-string res 0) "\n")
       res)))
 
 ; These special definitions make sure that nested
