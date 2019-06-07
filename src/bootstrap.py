@@ -16,6 +16,10 @@ from watchdog.events import PatternMatchingEventHandler
 from functools import reduce
 from parsec import *
 
+# Todo: look into converting Python tail calls to
+# iterations
+sys.setrecursionlimit(2500)
+
 ################### Global variables
 
 current_input_port = sys.stdin
