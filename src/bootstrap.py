@@ -160,6 +160,9 @@ class SchemeCallable:
             parms_pointer = self.params
             
             while isinstance(parms_pointer, Cons):
+                if not isinstance(args_pointer, Cons):
+                    raise ValueError('Not enough arguments supplied to SchemeCallable ' + self.name)
+
                 dct[parms_pointer.car().str] = args_pointer.car()
                 parms_pointer = parms_pointer.cdr()
                 args_pointer = args_pointer.cdr()
