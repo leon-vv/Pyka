@@ -250,10 +250,29 @@
     
     (cond-env clauses (env-ref 1))))
 
+#|
 (assert-equal
   (cond (#t 10)) 10)
 (assert-equal
   (cond (#f) (else (+ 1 2))) 3)
+(assert-equal
+  (cond ((equal? 5 5) 10))
+  10)
+(assert-equal
+  (cond
+    ((and (equal? 5 5) (< 10 5)) 1)
+    ((or (equal? 5 5) (< 10 5)) 2))
+  2)
+|#
+(assert-equal
+  (begin
+    (let ((pat '(+ 1 1)))
+      (cond
+        ((and (list? pat) (not (null? pat))) (+ 10 10)))))
+  20)
+
+      
+
 
 (define case
   (d-fexpr (key . clauses)
