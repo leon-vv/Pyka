@@ -328,9 +328,9 @@
 (define fun-shorthand
   (macro (sym-name fun)
     `(define ,sym-name
-      (macro (name-args . code)
-        `(define ,,(car name-args)
-          (,fun ,,(cdr name-args)
+      (macro (name args . code)
+        `(define ,,name
+          (,fun ,,args
           ,,@code))))))
 
 (fun-shorthand def-d-fun d-fun)
@@ -338,4 +338,3 @@
 (fun-shorthand def-d-fexpr d-fexpr)
 (fun-shorthand def-l-fexpr l-fexpr)
 (fun-shorthand def-macro macro)
-
