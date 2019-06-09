@@ -579,6 +579,7 @@ def new_global_env():
     'hash-table-ref': fn(lambda h, k: h[k.str]),
     'hash-table-exists?': fn(lambda h, k: k.str in h),
     'hash-table-set!': fn(lambda h, k, v: h.__setitem__(k.str, v)),
+    'hash-table-copy': fn(lambda h: dict(h)),
     
     # List
     'pair?': fn(lambda c: isinstance(c, Cons)),

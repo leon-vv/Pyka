@@ -28,14 +28,23 @@
 (assert-equal (parse-repeater '__0) 0)
 (assert-equal (parse-repeater '__abc) #f)
 
+; Let's define a 'matcher' as a function which
+; takes a value to match, a pattern and a hash table.
+; A matcher should return #f if the pattern fails to match
+; and - this is important - not mutate the passed hash table.
+; If the passed value does match the pattern however, the matcher
+; should return a hash table which possilby contains new matched
+; values. It's also allowed in this case to update
+; the passed hash table and simply return it.
+
 (def-d-fun match-list (val pats ht)
   (if (and (null? val) (null? pats))
     ht
     (if (or (null? val) (null? pats))
       #f 
-      (lets res (match-pat (car val) (car pats) ht)
+      (lets res (match-pat (car val) (car pats) (hash-table-copy ht))
         (if (hash-table? res)
-          (match-list (cdr val) (cdr pats) ht)
+          (match-list (cdr val) (cdr pats) res)
           #f)))))
 
 (def-d-fun match-list-rest (val pats ht)
@@ -50,9 +59,9 @@
           #f)))))
 
 (def-d-fun match-cons (val pat ht)
-  (lets res (match-pat (car val) (car pat) ht)
+  (lets res (match-pat (car val) (car pat) (hash-table-copy ht))
     (if (hash-table? res)
-      (match-pat (cdr val) (car (cdr pat)) ht)
+      (match-pat (cdr val) (car (cdr pat)) res)
       #f)))
 
 (def-d-fun match-pat (val pat ht)
@@ -84,7 +93,8 @@
             (if (pair? val) (match-cons val (cdr pat) ht) #f))
           ((and)
             (do
-              ((p (cdr pat) (cdr p)))
+              ((p (cdr pat) (cdr p))
+               (ht (hash-table-copy ht)))
               ((or (not (hash-table? ht))
                    (null? p))
                (if (and (hash-table? ht) (null? p)) ht #f))
@@ -100,6 +110,7 @@
           ((not)
             (do
               ((p (cdr pat) (cdr p))
+               (ht (hash-table-copy ht))
                (h #f))
               ((or (hash-table? h)
                    (null? p))
