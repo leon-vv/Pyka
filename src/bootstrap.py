@@ -679,18 +679,7 @@ def eval(env, expr):
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # It's a list
-        
-        fst = eval(env, expr.car())
-          
-        if isinstance(fst, Cons):
-            callble = fst.car()
-            new_env = fst.cdr()
-            if isinstance(callble, PythonCallable):
-                raise ValueError("Built in functions (PythonCallable) do not take a secondary environment.")
-            
-            res = callble(new_env, env, expr.cdr())
-        else: 
-            res = fst(env, env, expr.cdr())
+        res = eval(env, expr.car())(env, env, expr.cdr())
     
     eval_stack.pop()
     return res
