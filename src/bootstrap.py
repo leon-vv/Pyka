@@ -137,9 +137,9 @@ class PythonCallable:
     
     def __call__(self, env, p_env, args, evaluate=None):
         if evaluate == None: evaluate = self.evaluate
-        if evaluate: args = eval_all(p_env, args)
+        if evaluate: args = eval_all(env, args)
               
-        return self.fn(env, p_env, args)
+        return self.fn(env, args)
     
     def scheme_repr(self):
         return "{BultinFunction %s}" % self.name
@@ -152,7 +152,7 @@ class SchemeCallable:
          
         if evaluate == None: evaluate = self.type == 'd-fun'
        
-        if evaluate: args = eval_all(p_env, args)
+        if evaluate: args = eval_all(env, args)
 
         if isinstance(self.params, Cons):
             dct = {}
@@ -347,8 +347,8 @@ datums = many(ignore >> datum << ignore)
 def printd(val):
     print(scheme_repr(val))
 
-def define(env, p_env, args):
-    val = eval(p_env, args.cdr().car())
+def define(env, args):
+    val = eval(env, args.cdr().car())
     name = args.car().str
     
     if isinstance(val, SchemeCallable) \
@@ -357,12 +357,12 @@ def define(env, p_env, args):
      
     env.car()[name] = val
 
-def undefine(env, p_env, args):
+def undefine(env, args):
   name = args.car().str
   env.car().pop(name, None)
 
-def set(env, p_env, args):
-    to_set = eval(p_env, args.cdr().car())
+def set(env, args):
+    to_set = eval(env, args.cdr().car())
     key = args.car().str
     for ht in env:
         if key in ht:
@@ -370,7 +370,7 @@ def set(env, p_env, args):
             return to_set
     raise ValueError('Symbol to set %s is not active in the current environment' % key)
 
-def if_(env, _, args):
+def if_(env, args):
     cdr = args.cdr()
     cddr = cdr.cdr()
     if eval(env, args.car()):
@@ -380,17 +380,17 @@ def if_(env, _, args):
     else:
         return False
 
-def do(env, p_env, args):
+def do(env, args):
     dct = {}
     
     for b in args.car():
-        dct[b.car().str] = eval(p_env, b.cdr().car()) # init
+        dct[b.car().str] = eval(env, b.cdr().car()) # init
     
     test = args.cdr().car()
     
-    while not eval(Cons(dct, p_env), test.car()):
+    while not eval(Cons(dct, env), test.car()):
         for c in args.cdr().cdr():
-            eval(Cons(dct, env), c) # Todo: env or p_env?
+            eval(Cons(dct, env), c)
          
         vals = []
         
@@ -398,55 +398,55 @@ def do(env, p_env, args):
         for b in args.car():
             if b.cdr().cdr() != emptyList:
                 vals.append((b.car().str,
-                             eval(Cons(dct, p_env), b[2])))
+                             eval(Cons(dct, env), b[2])))
         
         # Update binding
         for name,val in vals: dct[name] = val
     
     return reduce(lambda _, e: eval(Cons(dct, env), e), test.cdr(), False)
 
-def let(env, p_env, args):
+def let(env, args):
     dict = {}
     
     for (symbol, expr) in args.car():
-        dict[symbol.str] = eval(p_env, expr)
+        dict[symbol.str] = eval(env, expr)
      
     return eval_all_ret_last(Cons(dict, env), args.cdr())
 
-def let_star(env, p_env, args):
+def let_star(env, args):
     dict = {}
-    p_env = Cons(dict, p_env)
+    new_env = Cons(dict, env)
     for (symbol, expr) in args.car():
-        dict[symbol.str] = eval(p_env, expr)
+        dict[symbol.str] = eval(new_env, expr)
 
     return eval_all_ret_last(Cons(dict, env), args.cdr())
 
-def map_(env, p_env, args):
+def map_(env, args):
     f = args.car()
     lst = args.cdr().car()
     if lst == emptyList: return emptyList
     
-    return lst.map(lambda e: f(env, p_env, Cons(e, emptyList), evaluate=False))
+    return lst.map(lambda e: f(env, env, Cons(e, emptyList), evaluate=False))
 
-def string_to_number(env, p_env, args):
+def string_to_number(env, args):
   try:
     return float(args.car())
   except ValueError:
     return False
 
-def call_with_port(env, p_env, port, proc):
-    proc(env, p_env, Cons(port, emptyList))
+def call_with_port(env, port, proc):
+    proc(env, Cons(port, emptyList))
     port.close()
 
-def call_with_input_file(env, p_env, file_name, proc):
+def call_with_input_file(env, file_name, proc):
     proc = open(file_name, 'r')
-    call_with_port(env, p_env, port, proc)
+    call_with_port(env, port, proc)
 
-def call_with_output_file(env, p_env, file_name, proc):
+def call_with_output_file(env, file_name, proc):
     proc = open(file_name, 'w')
-    call_with_port(env, p_env, port, proc)
+    call_with_port(env, port, proc)
 
-def with_input_from_file(env, p_env, file_name, proc):
+def with_input_from_file(env, file_name, proc):
     global current_input_port
     tmp = current_input_port
     current_input_port = open(file_name, 'r')
@@ -454,7 +454,7 @@ def with_input_from_file(env, p_env, file_name, proc):
     current_input_port.close()
     current_input_port = tmp
 
-def with_output_to_file(env, p_env, file_name, proc):
+def with_output_to_file(env, file_name, proc):
     global current_input_port
     tmp = current_input_port
     current_input_port = open(file_name, 'r')
@@ -466,27 +466,27 @@ def read_all(port=current_input_port):
     content = port.read()
     return Cons.from_iterator(datums.parse_strict(content))
 
-def load(env, _, args):
+def load(env, args):
     file_name = args.car()
     if args.cdr() != emptyList:
       env = args.cdr().car()
     read_execute_file(env, file_name)
 
-def and_(env, p_env, args):
+def and_(env, args):
     if args == emptyList: return True
-    first = eval(p_env, args.car())
+    first = eval(env, args.car())
     if first:
-        return and_(env, p_env, args.cdr())
+        return and_(env, args.cdr())
     else:
         return False
 
-def or_(env, p_env, args):
+def or_(env, args):
     if args == emptyList: return False
-    first = eval(p_env, args.car())
+    first = eval(env, args.car())
     if first:
         return True
     else:
-        return or_(env, p_env, args.cdr())
+        return or_(env, args.cdr())
 
 # Simple implementation of continuations using Exceptions
 # Note: this implementation does NOT support continuations
@@ -499,20 +499,20 @@ class ResumeFromContinuation(Exception):
 
 continuation_id = 0
 
-def call_cc(env, p_env, args):
+def call_cc(env, args):
 
     global continuation_id
     id_ = continuation_id
     continuation_id += 1
      
-    def raise_(env, p_env, args=emptyList):
+    def raise_(env, args=emptyList):
         val = args.car() if args != emptyList else False
         raise ResumeFromContinuation(val, id_)
       
     continuation = PythonCallable(raise_, True)
         
     try:
-        return args.car()(env, p_env, Cons(continuation, emptyList))
+        return args.car()(env, Cons(continuation, emptyList))
     except ResumeFromContinuation as r:
         if r == id_:
             return r.val
@@ -524,14 +524,14 @@ def new_global_env():
     SC = SchemeCallable
     
     # Simple callable
-    fn = lambda fn: PythonCallable(lambda env, p_env, args: fn(*args), True)
+    fn = lambda fn: PythonCallable(lambda env, args: fn(*args), True)
      
     env = Cons({
 
     # Control flow primitives
     'eval': fn(lambda expr, env: eval(env, expr)),
-    'd-fexpr': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'd-fexpr'), False),
-    'd-fun': PC(lambda env, p_env, args: SC(args.car(), args.cdr(), 'd-fun'), False),
+    'd-fexpr': PC(lambda env, args: SC(args.car(), args.cdr(), 'd-fexpr'), False),
+    'd-fun': PC(lambda env, args: SC(args.car(), args.cdr(), 'd-fun'), False),
     'define': PC(define, False),
     'undefine': PC(undefine, False),
     'if': PC(if_, False),
@@ -539,10 +539,10 @@ def new_global_env():
     'exit': fn(exit),
     'call-with-current-continuation': PC(call_cc, True),
     'call/cc': PC(call_cc, True),
-    'get-env': PC(lambda env, p_env, args: env, True),
+    'get-env': PC(lambda env, args: env, True),
     
     'do': PC(do, False),
-    'apply': PC(lambda env, p_env, args: args.car()(env, p_env, args[1], evaluate=False), True),
+    'apply': PC(lambda env, args: args.car()(env, env, args[1], evaluate=False), True),
 
     'let': PC(let, False),
     'let*': PC(let_star, False),
@@ -685,6 +685,9 @@ def eval(env, expr):
         if isinstance(fst, Cons):
             callble = fst.car()
             new_env = fst.cdr()
+            if isinstance(callble, PythonCallable):
+                raise ValueError("Built in functions (PythonCallable) do not take a secondary environment.")
+            
             res = callble(new_env, env, expr.cdr())
         else: 
             res = fst(env, env, expr.cdr())
