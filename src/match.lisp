@@ -33,12 +33,12 @@
 ; A matcher should return #f if the pattern fails to match
 ; and - this is important - not mutate the passed hash table.
 ; If the passed value does match the pattern however, the matcher
-; should return a hash table which possilby contains new matched
+; should return a hash table which possibly contains new matched
 ; values. It's also allowed in this case to update
 ; the passed hash table and simply return it.
 
 (def-d-fun match-qp (val pat ht)
-  (debug (cond
+  (cond
     ((literal? pat)
       (match-literal val pat ht))
     ((symbol? pat)
@@ -46,7 +46,7 @@
     ((and (list? pat) (not (null? pat)))
       (if (equal? (car pat) 'unquote)
         (match-pat val (car (cdr pat)) ht)
-        (match-list val pat ht match-qp))))))
+        (match-list val pat ht match-qp)))))
 
 (def-d-fun match-list (val pats ht matcher)
   (if (and (null? val) (null? pats))
@@ -100,7 +100,7 @@
           ((quote)
             (if (equal? (car (cdr pat)) val) ht #f))
           ((quasiquote)
-            (match-qp val (cdr pat) ht))
+            (match-qp val (car (cdr pat)) ht))
           ((list)
             (if (list? val) (match-list val (cdr pat) ht match-pat) #f))
           ((list-rest)
@@ -233,14 +233,20 @@
     (_ 'no))
   'no)
 
-
-#|
 (assert-equal
   (match '(1 2 3)
     (`,a a))
   '(1 2 3))
 
-|#
+(assert-equal
+  (match '5 (`,a a))
+  5)
+
+(assert-equal
+  (match '(1 2 3)
+    (`(1 ,a 3) a))
+  2)
+
 
 
 
