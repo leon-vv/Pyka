@@ -37,14 +37,25 @@
 ; values. It's also allowed in this case to update
 ; the passed hash table and simply return it.
 
-(def-d-fun match-list (val pats ht)
+(def-d-fun match-qp (val pat ht)
+  (debug (cond
+    ((literal? pat)
+      (match-literal val pat ht))
+    ((symbol? pat)
+      (match-symbol val pat ht))
+    ((and (list? pat) (not (null? pat)))
+      (if (equal? (car pat) 'unquote)
+        (match-pat val (car (cdr pat)) ht)
+        (match-list val pat ht match-qp))))))
+
+(def-d-fun match-list (val pats ht matcher)
   (if (and (null? val) (null? pats))
     ht
     (if (or (null? val) (null? pats))
       #f 
-      (lets res (match-pat (car val) (car pats) (hash-table-copy ht))
+      (lets res (matcher (car val) (car pats) (hash-table-copy ht))
         (if (hash-table? res)
-          (match-list (cdr val) (cdr pats) res)
+          (match-list (cdr val) (cdr pats) res matcher)
           #f)))))
 
 (def-d-fun match-list-rest (val pats ht)
@@ -64,29 +75,34 @@
       (match-pat (cdr val) (car (cdr pat)) res)
       #f)))
 
+(def-d-fun match-literal (val pat ht)
+  (if (equal? pat val) ht #f))
+
+(def-d-fun match-symbol (val pat ht)
+  (if (hash-table-exists? ht pat)
+    (if (equal? (hash-table-ref ht pat) val) ht #f)
+    (begin
+      (hash-table-set! ht pat val)
+      ht)))
+
 (def-d-fun match-pat (val pat ht)
   (cond
     ((equal? pat '_) ht)
     
-    ((symbol? pat)
+    ((symbol? pat) (match-symbol val pat ht))
+   
+    ((literal? pat) (match-literal val pat ht))
     
-      (if (hash-table-exists? ht pat)
-        (if (equal? (hash-table-ref ht pat) val) ht #f)
-        (begin
-          (hash-table-set! ht pat val)
-          ht)))
-    
-    ((literal? pat)
-      (if (equal? pat val) ht #f))    
-
     ((and (list? pat) (not (null? pat)))
       
       (lets f (car pat)
         (case f
           ((quote)
             (if (equal? (car (cdr pat)) val) ht #f))
+          ((quasiquote)
+            (match-qp val (cdr pat) ht))
           ((list)
-            (if (list? val) (match-list val (cdr pat) ht) #f))
+            (if (list? val) (match-list val (cdr pat) ht match-pat) #f))
           ((list-rest)
             (if (pair? val) (match-list-rest val (cdr pat) ht) #f))
           ((cons)
@@ -218,7 +234,13 @@
   'no)
 
 
+#|
+(assert-equal
+  (match '(1 2 3)
+    (`,a a))
+  '(1 2 3))
 
+|#
 
 
 
