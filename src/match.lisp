@@ -42,7 +42,7 @@
     ((literal? pat)
       (match-literal val pat ht))
     ((symbol? pat)
-      (match-symbol val pat ht))
+      (if (equal? val pat) ht #f))
     ((and (list? pat) (not (null? pat)))
       (if (equal? (car pat) 'unquote)
         (match-pat val (car (cdr pat)) ht)
