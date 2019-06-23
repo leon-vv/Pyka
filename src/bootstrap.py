@@ -564,6 +564,8 @@ def new_global_env():
     '>=': fn(op.ge),
     '<=': fn(op.le),
     '=': fn(op.eq),
+    'min': fn(min),
+    'max': fn(max),
     
     # Boolean
     'not': fn(lambda b: not b),
