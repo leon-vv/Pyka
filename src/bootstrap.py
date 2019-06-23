@@ -674,7 +674,7 @@ def eval_all_ret_last(env, it):
 eval_stack = []
 
 def eval(env, expr):
-    eval_stack.append(expr)
+    eval_stack.append((env, expr))
     res = None 
     
     if isinstance(expr, Symbol):
@@ -692,16 +692,18 @@ def eval_string(str_):
 
 def print_eval_stack():
     global eval_stack
-
-    for expr in [eval_stack[0]] + eval_stack[-5:]:
-        print('EVALUATING: \t', scheme_repr(expr))
-        if hasattr(expr, 'line'):
-            print('PARSED AT: \t line ' + str(expr.line) + '\n')
+    
+    if len(eval_stack) > 0:
+        for (env, expr) in [eval_stack[0]] + eval_stack[-5:]:
+            print('EVALUATING: \t', scheme_repr(expr))
+            if hasattr(expr, 'line'):
+                print('PARSED AT: \t line ' + str(expr.line))
+            print('IN ENV: \t', scheme_repr(env), '\n')
   
     eval_stack = []
 
 def handle_exception(env, e):
-    print('\nEXCEPTION: \t', e)
+    print('\nEXCEPTION: \t', e, '\n')
         
     print_eval_stack()
       
