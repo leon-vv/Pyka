@@ -320,11 +320,6 @@
     ((macro (x) x) (+ 1 1))
     2)
 
-; Let single
-(define lets
-  (macro (name val . cmnds)
-    `(let ((,name ,val)) ,@cmnds)))
-
 (define fun-shorthand
   (macro (sym-name fun)
     `(define ,sym-name
@@ -338,3 +333,27 @@
 (fun-shorthand def-d-fexpr d-fexpr)
 (fun-shorthand def-l-fexpr l-fexpr)
 (fun-shorthand def-macro macro)
+
+(def-macro with/cc (name . code)
+  `(call/cc (d-fun (,name) ,@code)))
+
+(assert-equal
+  (begin
+    (call/cc (d-fun (finish) (finish)))
+    10)
+  10)
+
+(assert-equal
+  (+ 2 (with/cc r (r 5)))
+  7)
+
+ ; Let single
+(def-macro lets (name val . cmnds)
+    `(let ((,name ,val)) ,@cmnds))
+
+(def-macro prepend-to (variable value)
+  `(set! ,variable (cons ,value ,variable)))
+
+
+
+
