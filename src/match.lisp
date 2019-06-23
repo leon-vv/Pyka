@@ -159,6 +159,11 @@
   5)
 
 (assert-equal
+  (match 10
+    (10 1 2 3))
+  3)
+
+(assert-equal
   (match "abc"
     ("abc" 1))
   1)
