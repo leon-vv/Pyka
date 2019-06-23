@@ -101,7 +101,9 @@
     (let ((res (eval-prev v)))
       (print "======= DEBUG ====== "
              "\nCalled with:\n " (pretty-string v 0)
-             "\nResult is:\n " (pretty-string res 0) "\n")
+             (if (not (equal? v res))
+                (string-append "\nResult is:\n " (pretty-string res 0) "\n")
+                "\n"))
       res)))
 
 ; These special definitions make sure that nested
