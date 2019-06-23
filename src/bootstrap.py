@@ -653,16 +653,17 @@ def new_global_env():
     return env
 
 def value_of_symbol(env, sym):
-    while True:
-        if env == emptyList:
-            raise ValueError('Key %s could not be found in environment' % sym.str)
+    while env != emptyList:
+        dct = env.car()
+        if sym.str in dct:
+            val = dct.get(sym.str)
+            if val != None: return val
         else:
-            dct = env.car()
-            if sym.str in dct:
-              val = dct.get(sym.str)
-              if val != None: return val
-              else: raise ValueError('Key %s is equal to None in environment' % sym.str)
-            env = env.cdr()
+            printd(env)        
+            raise ValueError('Key %s is equal to None in environment' % sym.str)
+        env = env.cdr()
+        
+    raise ValueError('Key %s could not be found in environment' % sym.str)
 
 def eval_all(env, it):
     return Cons.from_iterator(map(lambda e: eval(env, e), it))
