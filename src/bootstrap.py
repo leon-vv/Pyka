@@ -152,7 +152,7 @@ class SchemeCallable:
          
         if evaluate == None: evaluate = self.type == 'd-fun'
        
-        if evaluate: args = eval_all(env, args)
+        if evaluate: args = eval_all(p_env, args)
 
         if isinstance(self.params, Cons):
             dct = {}
@@ -512,9 +512,9 @@ def call_cc(env, args):
     continuation = PythonCallable(raise_, True)
         
     try:
-        return args.car()(env, Cons(continuation, emptyList))
+        return args.car()(env, env, Cons(continuation, emptyList))
     except ResumeFromContinuation as r:
-        if r == id_:
+        if r.id == id_:
             return r.val
         else:
             raise
