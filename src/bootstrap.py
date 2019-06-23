@@ -658,9 +658,8 @@ def value_of_symbol(env, sym):
         if sym.str in dct:
             val = dct.get(sym.str)
             if val != None: return val
-        else:
-            printd(env)        
-            raise ValueError('Key %s is equal to None in environment' % sym.str)
+            else:
+                raise ValueError('Key %s is equal to None in environment' % sym.str)
         env = env.cdr()
         
     raise ValueError('Key %s could not be found in environment' % sym.str)
