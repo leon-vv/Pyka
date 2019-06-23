@@ -137,17 +137,18 @@
     (else #f)))
       
 
-(def-d-fexpr match (val . clauses)
+(def-d-fexpr match (expr . clauses)
   
-    (def-d-fun match-env (val clauses env)
-      (if (null? clauses)
-        #f
-        (lets res (match-pat val (car (car clauses)) (make-hash-table))
-          (if (hash-table? res)
-            (eval (car (cdr (car clauses))) (cons res env))
-            (match-env val (cdr clauses) env)))))
+    (let ((val (eval-prev expr))
+          (env (env-ref 1)))
 
-    (match-env (eval-prev val) clauses (env-ref 1)))
+      (with/cc return
+        (do ((clauses clauses (cdr clauses)))
+            ((null? clauses) #f)
+            
+          (lets res (match-pat val (car (car clauses)) (make-hash-table))
+            (if (hash-table? res)
+              (return (eval-all (cdr (car clauses)) (cons res env)))))))))
       
 ; These test cases are taken from 
 ; https://docs.racket-lang.org/reference/match.html
