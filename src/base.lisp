@@ -188,15 +188,13 @@
         (get-env))
     (cons 1 2))
 
-(define l-fun-nth
-  (d-fun (args body nth)
-    (cons
-      (eval-prev `(d-fun ,args ,@body))
-      (env-ref (+ nth 1)))))
-
 (define l-fun
-  (d-fexpr args
-    (l-fun-nth (car args) (cdr args) 1)))
+  (d-fexpr (args . body)
+    (cons (eval-prev `(d-fun ,args ,@body)) (env-ref 1))))
+
+(define l-fexpr
+  (d-fexpr (args . body)
+    (cons (eval-prev `(d-fexpr ,args ,@body)) (env-ref 1))))
 
 (define set!
   (d-fexpr (var val)
