@@ -49,7 +49,7 @@
             (and (< step 0) (<= start end))
             (and (> step 0) (>= start end))))
       (finish)
-      (lets s start (set! start (+ start step) s)))))
+      (lets s start (set! start (+ start step)) s))))
     
 (assert-equal
   (lets g (numer-gen 1 3 1)
@@ -58,7 +58,7 @@
 
 (assert-equal
   (lets g (numer-gen 1 -10 -3)
-    (g #f) (g #f) (g #f) (g #f) (g (d-fun () '#f)))
+    (g #f) (g #f) (g #f) (g #f) (g (d-fun () #f)))
   #f)
 
 #|
