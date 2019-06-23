@@ -580,7 +580,7 @@ def new_global_env():
     # Hash table
     'make-hash-table': fn(lambda: {}),
     'hash-table?': fn(lambda h: isinstance(h, dict)),
-    'hash-table-keys': fn(lambda h: Cons.from_iterator(h.keys())),
+    'hash-table-keys': fn(lambda h: Cons.from_iterator(map(Symbol, h.keys()))),
     'hash-table-values': fn(lambda h: Cons.from_iterator(h.values())),
     'hash-table-ref': fn(lambda h, k: h[k.str]),
     'hash-table-exists?': fn(lambda h, k: k.str in h),
