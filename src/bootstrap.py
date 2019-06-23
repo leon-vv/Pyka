@@ -167,8 +167,12 @@ class SchemeCallable:
                 parms_pointer = parms_pointer.cdr()
                 args_pointer = args_pointer.cdr()
              
+            # If we have an arg list of the form (arg1 . argrest)
+            # here we bind argrest
             if parms_pointer != emptyList:
                 dct[parms_pointer.str] = args_pointer
+            elif args_pointer != emptyList:
+                raise ValueError('Too many arguments supplied to SchemeCallable ' + self.name)
         
         elif isinstance(self.params, Symbol):
             dct = {self.params.str: args}
