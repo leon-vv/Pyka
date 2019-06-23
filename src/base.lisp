@@ -72,20 +72,24 @@
       (d-fun (lst indent)
         (string-append
           "("
-          (pretty-string (car lst) 0) "\n"
-          (string-join
-            "\n"
-            (map 
-              (d-fun (v) (at-indent indent (pretty-string v (+ indent 1))))
-              (cdr lst)))
-          ")")))
+          (pretty-string (car lst) 0)
+          (if (null? (cdr lst))
+            ")"
+            (string-append
+              "\n" 
+              (string-join
+                "\n"
+                (map 
+                  (d-fun (v) (at-indent indent (pretty-string v (+ indent 1))))
+                  (cdr lst)))
+              ")")))))
      
     (define pretty-string-aux  
       (d-fun (val indent)
         (if (not (pair? val))
           (any->string val)
           (if (equal? (car val) 'unquote)
-            (string-append "," (pretty-string (car (cdr val)) (+ indent 1)))
+            (string-append "," (pretty-string (car (cdr val)) 0))
             (if (equal? (car val) 'unquote-splicing)
               (string-append ",@" (pretty-string (car (cdr val)) (+ indent 1)))
               (pretty-list val indent))))))
