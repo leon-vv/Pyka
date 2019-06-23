@@ -287,7 +287,7 @@ def symbol():
         normal_identifier ^
         peculiar_identifier ^
         peculiar_identifier_dot))
-    return Symbol(s[1], s[0][0])
+    return Symbol(s[1], s[0][0] + 1)
 
 escaped_or_char = escaped_char ^ none_of('"')
 
@@ -318,7 +318,7 @@ def list_():
     else:
         c = Cons.from_iterator(es)
 
-    c.line = line
+    c.line = line + 1
     return c
 
 @generate
