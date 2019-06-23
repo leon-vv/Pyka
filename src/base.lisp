@@ -50,7 +50,7 @@
 
 (define begin
   (d-fun stmts
-    (last stmts)))
+    (if (null? stmts) #f (last stmts))))
 
 (define eval-nth
 	(d-fun (expr nth)
