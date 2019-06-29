@@ -619,7 +619,7 @@ def new_global_env():
     'make-string': fn(lambda k, char='~': char*int(k)),
     'string-length': fn(lambda s: len(s)),
     'string-ref': fn(lambda s, k: s[int(k)]),
-    'string-append': fn(lambda *s: reduce(op.add, s, '')),
+    'string-append': fn(lambda *s: ''.join(s)),
     'string-join': fn(lambda sep, s: sep.join(s)),
     'string->symbol': fn(lambda s: Symbol(s)),
     'any->string': fn(lambda v: scheme_repr(v)),
