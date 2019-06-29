@@ -492,6 +492,10 @@ def or_(env, args):
     else:
         return or_(env, args.cdr())
 
+def hash_table_merge(env, args):
+  args.car().update(args.cdr().car())
+  return args.car()
+
 # Simple implementation of continuations using Exceptions
 # Note: this implementation does NOT support continuations
 # that escape the call/cc function
@@ -583,6 +587,7 @@ def new_global_env():
     'hash-table-keys': fn(lambda h: Cons.from_iterator(map(Symbol, h.keys()))),
     'hash-table-values': fn(lambda h: Cons.from_iterator(h.values())),
     'hash-table-ref': fn(lambda h, k: h[k.str]),
+    'hash-table-merge!': PC(hash_table_merge, True)
     'hash-table-exists?': fn(lambda h, k: k.str in h),
     'hash-table-set!': fn(lambda h, k, v: h.__setitem__(k.str, v)),
     'hash-table-copy': fn(lambda h: dict(h)),
