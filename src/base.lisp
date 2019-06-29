@@ -275,8 +275,11 @@
         ((and (list? pat) (not (null? pat))) (+ 10 10)))))
   20)
 
-      
-
+(define flatten
+  (d-fun (x)
+    (cond ((null? x) '())
+          ((pair? x) (append (flatten (car x)) (flatten (cdr x))))
+          (else (list x)))))
 
 (define case
   (d-fexpr (key . clauses)
