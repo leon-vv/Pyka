@@ -63,7 +63,7 @@ class Cons(cabc.Sequence):
         x = emptyList
         l = list(it)
         i = len(l) - 1
-        
+                 
         if len(l) <= 1 and not return_list:
             raise ValueError('Cannot return pair with less than two values')
         elif not return_list:
@@ -151,8 +151,8 @@ class PythonCallable:
 class SchemeCallable:
     def __init__(self, params, body, type):
         self.params, self.body, self.type, self.name = params, body, type, None
+
     def __call__(self, env, p_env, args, evaluate=None):
-        
         assert evaluate == None or isinstance(evaluate, bool)
          
         if evaluate == None: evaluate = self.type == 'd-fun'
@@ -350,12 +350,15 @@ datum = simple_datum ^ compound_datum
 datums = many(ignore >> datum << ignore)
 
 
-################### Environment
+################### Standard functions
+
+### Utilities
 
 # Print debug
 def printd(val):
     print(scheme_repr(val))
 
+### Control flow primitives
 def define(env, args):
     val = eval(env, args.cdr().car())
     name = args.car().str
@@ -369,15 +372,6 @@ def define(env, args):
 def undefine(env, args):
   name = args.car().str
   env.car().pop(name, None)
-
-def set(env, args):
-    to_set = eval(env, args.cdr().car())
-    key = args.car().str
-    for ht in env:
-        if key in ht:
-            ht[key] = to_set
-            return to_set
-    raise ValueError('Symbol to set %s is not active in the current environment' % key)
 
 def if_(env, args):
     cdr = args.cdr()
@@ -430,6 +424,79 @@ def let_star(env, args):
 
     return eval_all_ret_last(Cons(dict, env), args.cdr())
 
+# Simple implementation of continuations using Exceptions
+# Note: this implementation does NOT support continuations
+# that escape the call/cc function
+
+class ResumeFromContinuation(Exception):
+    def __init__(self, val, id_):
+        self.val = val
+        self.id = id_
+
+continuation_id = 0
+
+def call_cc(env, args):
+
+    global continuation_id
+    id_ = continuation_id
+    continuation_id += 1
+     
+    def raise_(env, args=emptyList):
+        val = args.car() if args != emptyList else False
+        raise ResumeFromContinuation(val, id_)
+      
+    continuation = PythonCallable(raise_, True)
+        
+    try:
+        return args.car()(env, env, Cons(continuation, emptyList))
+    except ResumeFromContinuation as r:
+        if r.id == id_:
+            return r.val
+        else:
+            raise
+
+def load(env, args):
+    file_name = args.car()
+    if args.cdr() != emptyList:
+      env = args.cdr().car()
+    read_execute_file(env, file_name)
+     
+### Boolean
+
+def and_(env, args):
+    last = True
+
+    for v in args:
+        last = eval(env, v)
+            
+        if not last:
+            return False
+
+    return last
+
+def or_(env, args):
+    for v in args:
+        last = eval(env, v)
+
+        if last: return last
+        
+    return False
+
+
+### Hash table
+
+def hash_table_merge(env, args):
+    args.car().update(args.cdr().car())
+    return args.car()
+
+def hash_table_walk(env, args):
+    h = args.car()
+    proc = args.cdr().car()
+    for k, v in h.items():
+        proc(env, env, Cons(Symbol(k), Cons(v, emptyList)), evaluate=False)
+
+### List
+
 def map_(env, args):
     f = args.car()
     lst = args.cdr().car()
@@ -437,11 +504,15 @@ def map_(env, args):
     
     return lst.map(lambda e: f(env, env, Cons(e, emptyList), evaluate=False))
 
+### String
+
 def string_to_number(env, args):
-  try:
-    return float(args.car())
-  except ValueError:
-    return False
+    try:
+        return float(args.car())
+    except ValueError:
+        return False
+
+### Port
 
 def call_with_port(env, port, proc):
     proc(env, Cons(port, emptyList))
@@ -475,79 +546,52 @@ def read_all(port=current_input_port):
     content = port.read()
     return Cons.from_iterator(datums.parse_strict(content))
 
-def load(env, args):
-    file_name = args.car()
-    if args.cdr() != emptyList:
-      env = args.cdr().car()
-    read_execute_file(env, file_name)
 
-def and_(env, args):
-    last = True
-    
-    for v in args:
-      last = eval(env, v)
-         
-      if not last:
-        return False
-    
-    return last
+### Environment
 
-def or_(env, args):
-    for v in args:
-        last = eval(env, v)
+def env_walk(env, args):
+    env_arg = args.car()
+    proc = args.cdr().car()
+    key_set = set()
 
-        if last: return last
+    for h in env_arg:
+        for (k, v) in h.items():
+            if not (k in key_set):
+                key_set.add(k)
+                proc(env, env, Cons(k, Cons(v, emptyList)))
+
+def env_keys(env):
+    key_set = set()
+    for h in env:
+        key_set.update(h.keys())
+    return Cons.from_iterator(key_set)
+
+def env_values(env):
+    value_set = set()
+    for h in env:
+        value_set.update(h.values())
+    return Cons.from_iterator(value_set)
+ 
+def env_ref(env, sym):
+    while env != emptyList:
+        dct = env.car()
+        if sym.str in dct:
+            val = dct.get(sym.str)
+            if val != None: return val
+            else:
+                raise ValueError('Key %s is equal to None in environment' % sym.str)
+        env = env.cdr()
+    return None
         
-    return False
-
-
-def hash_table_merge(env, args):
-  args.car().update(args.cdr().car())
-  return args.car()
-
-# Simple implementation of continuations using Exceptions
-# Note: this implementation does NOT support continuations
-# that escape the call/cc function
-def hash_table_walk(env, args):
-  h = args.car()
-  proc = args.cdr().car()
-  for k, v in h.items():
-    proc(env, env, Cons(Symbol(k), Cons(v, emptyList)), evaluate=False)
-
-class ResumeFromContinuation(Exception):
-    def __init__(self, val, id_):
-        self.val = val
-        self.id = id_
-
-continuation_id = 0
-
-def call_cc(env, args):
-
-    global continuation_id
-    id_ = continuation_id
-    continuation_id += 1
-     
-    def raise_(env, args=emptyList):
-        val = args.car() if args != emptyList else False
-        raise ResumeFromContinuation(val, id_)
-      
-    continuation = PythonCallable(raise_, True)
-        
-    try:
-        return args.car()(env, env, Cons(continuation, emptyList))
-    except ResumeFromContinuation as r:
-        if r.id == id_:
-            return r.val
-        else:
-            raise
+def env_exists(env, k):
+    return env_ref(env, k) != None
 
 def new_global_env():
     PC = PythonCallable
     SC = SchemeCallable
-    
-    # Simple callable
-    fn = lambda fn: PythonCallable(lambda env, args: fn(*args), True)
      
+    fn = lambda fn: PythonCallable(lambda env, args: fn(*args), True)
+      
     env = Cons({
 
     # Control flow primitives
@@ -559,21 +603,14 @@ def new_global_env():
     'if': PC(if_, False),
     'equal?': fn(op.eq),
     'exit': fn(exit),
-    'call-with-current-continuation': PC(call_cc, True),
-    'call/cc': PC(call_cc, True),
-    'get-env': PC(lambda env, args: env, True),
-    
     'do': PC(do, False),
-    'apply': PC(lambda env, args: args.car()(env, env, args[1], evaluate=False), True),
-
     'let': PC(let, False),
     'let*': PC(let_star, False),
-
+    'call-with-current-continuation': PC(call_cc, True),
+    'get-env': PC(lambda env, args: env, True),
+    
+    'apply': PC(lambda env, args: args.car()(env, env, args[1], evaluate=False), True),
     'load': PC(load, True),
-     
-    # Data structure primitives
-
-    # Procedures
     'procedure?': fn(lambda p: isinstance(p, PC) or isinstance(p, SC)),
     
     # Number
@@ -618,7 +655,7 @@ def new_global_env():
     'length': fn(lambda l: len(l)),
     'list->vector': fn(lambda l: list(l)),
     'map': PC(map_, True),
-    
+
     # Vector
     'vector?': fn(lambda x: isinstance(x, list)),
     'make-vector': fn(lambda k=0,fill=0: [fill]*int(k)),
@@ -667,8 +704,14 @@ def new_global_env():
      
     'write': fn(lambda val, port=current_output_port: port.write(scheme_repr(val))),
     'newline': fn(lambda port=current_output_port: port.write('\n')),
-    'write-string': fn(lambda s, port=current_output_port: port.write(s))
+    'write-string': fn(lambda s, port=current_output_port: port.write(s)),
 
+    # Environment
+    'env-walk': PC(env_walk, True),
+    'env-keys': fn(env_keys),
+    'env-values': fn(env_values),
+    'env-ref': fn(env_ref),
+    'env-exists?': fn(env_exists)
     }, emptyList)
 
     for key, val in env.car().items():
@@ -676,17 +719,7 @@ def new_global_env():
 
     return env
 
-def value_of_symbol(env, sym):
-    while env != emptyList:
-        dct = env.car()
-        if sym.str in dct:
-            val = dct.get(sym.str)
-            if val != None: return val
-            else:
-                raise ValueError('Key %s is equal to None in environment' % sym.str)
-        env = env.cdr()
-        
-    raise ValueError('Key %s could not be found in environment' % sym.str)
+################### Evaluation
 
 def eval_all(env, it):
     return Cons.from_iterator(map(lambda e: eval(env, e), it))
@@ -701,7 +734,9 @@ def eval(env, expr):
     res = None 
     
     if isinstance(expr, Symbol):
-        res = value_of_symbol(env, expr)
+        res = env_ref(env, expr)
+        if res == None:
+            raise ValueError('Key %s could not be found in environment' % sym.str)
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # It's a list
