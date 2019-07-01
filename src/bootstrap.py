@@ -77,6 +77,7 @@ class Cons(cabc.Sequence):
         return x
 
     def __call__(self, env, p_env, args, evaluate=None):
+        assert evaluate == None or isinstance(evaluate, bool)
         return self.car()(self.cdr(), p_env, args, evaluate) 
      
     # Structure preserving map
@@ -136,6 +137,8 @@ class PythonCallable:
         self.name = fn.__name__
     
     def __call__(self, env, p_env, args, evaluate=None):
+        assert evaluate == None or isinstance(evaluate, bool)
+        
         if evaluate == None: evaluate = self.evaluate
         if evaluate: args = eval_all(env, args)
               
@@ -149,6 +152,8 @@ class SchemeCallable:
     def __init__(self, params, body, type):
         self.params, self.body, self.type, self.name = params, body, type, None
     def __call__(self, env, p_env, args, evaluate=None):
+        
+        assert evaluate == None or isinstance(evaluate, bool)
          
         if evaluate == None: evaluate = self.type == 'd-fun'
        
