@@ -482,20 +482,24 @@ def load(env, args):
     read_execute_file(env, file_name)
 
 def and_(env, args):
-    if args == emptyList: return True
-    first = eval(env, args.car())
-    if first:
-        return and_(env, args.cdr())
-    else:
+    last = True
+    
+    for v in args:
+      last = eval(env, v)
+         
+      if not last:
         return False
+    
+    return last
 
 def or_(env, args):
-    if args == emptyList: return False
-    first = eval(env, args.car())
-    if first:
-        return True
-    else:
-        return or_(env, args.cdr())
+    for v in args:
+        last = eval(env, v)
+
+        if last: return last
+        
+    return False
+
 
 def hash_table_merge(env, args):
   args.car().update(args.cdr().car())
