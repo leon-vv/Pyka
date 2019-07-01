@@ -16,7 +16,12 @@
     (apply print-string msgs)
     (exit 1)))
 
+(define call/cc call-with-current-continuation)
 (define quote (d-fexpr (x) x))
+
+(define env-copy
+  (d-fun (env)
+    (map hash-table-copy env)))
 
 (define append
   (d-fun lsts
