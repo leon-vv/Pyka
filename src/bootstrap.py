@@ -499,6 +499,11 @@ def hash_table_merge(env, args):
 # Simple implementation of continuations using Exceptions
 # Note: this implementation does NOT support continuations
 # that escape the call/cc function
+def hash_table_walk(env, args):
+  h = args.car()
+  proc = args.cdr().car()
+  for k, v in h.items():
+    proc(env, env, Cons(Symbol(k), Cons(v, emptyList)), evaluate=False)
 
 class ResumeFromContinuation(Exception):
     def __init__(self, val, id_):
@@ -587,7 +592,8 @@ def new_global_env():
     'hash-table-keys': fn(lambda h: Cons.from_iterator(map(Symbol, h.keys()))),
     'hash-table-values': fn(lambda h: Cons.from_iterator(h.values())),
     'hash-table-ref': fn(lambda h, k: h[k.str]),
-    'hash-table-merge!': PC(hash_table_merge, True)
+    'hash-table-merge!': PC(hash_table_merge, True),
+    'hash-table-walk': PC(hash_table_walk, True),
     'hash-table-exists?': fn(lambda h, k: k.str in h),
     'hash-table-set!': fn(lambda h, k, v: h.__setitem__(k.str, v)),
     'hash-table-copy': fn(lambda h: dict(h)),
