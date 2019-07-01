@@ -36,13 +36,15 @@
                       (cons (cdr (car lsts))
                             (cdr lsts)))))))))
 
+; Differs from RSR7 'list-tail' function
+; in that (> k (length lst)) does not cause an error
 (define list-skip-n
   (d-fun (lst k)
     (if (or (null? lst) (equal? k 0))
       lst
       (list-skip-n (cdr lst) (- k 1)))))
 
-(define env-ref
+(define env-tail
   (d-fun nth
     (list-skip-n (get-env)
       (if (null? nth) 1 (+ (car nth) 1)))))
@@ -59,7 +61,7 @@
 
 (define eval-nth
 	(d-fun (expr nth)
-		(eval expr (env-ref (+ nth 1)))))
+		(eval expr (env-tail (+ nth 1)))))
 
 (define eval-prev
   (d-fun (expr)
@@ -146,7 +148,7 @@
               (eval (car (cdr c)) env)
               (quasiquote-cons-env c env)))))
       
-    (quasiquote-env val (env-ref 1))))
+    (quasiquote-env val (env-tail 1))))
  
 (define assert-equal
   (d-fexpr (code res)
@@ -195,11 +197,11 @@
 
 (define l-fun
   (d-fexpr (args . body)
-    (cons (eval-prev `(d-fun ,args ,@body)) (env-ref 1))))
+    (cons (eval-prev `(d-fun ,args ,@body)) (env-tail 1))))
 
 (define l-fexpr
   (d-fexpr (args . body)
-    (cons (eval-prev `(d-fexpr ,args ,@body)) (env-ref 1))))
+    (cons (eval-prev `(d-fexpr ,args ,@body)) (env-tail 1))))
 
 (define set!
   (d-fexpr (var val)
@@ -214,7 +216,7 @@
                     (hash-table-set! ht var val)
                     (set!-env var val (cdr env)))))))
     
-    (set!-env var (eval-prev val) (env-ref 1))))
+    (set!-env var (eval-prev val) (env-tail 1))))
 
 (define counter
   (d-fun (n)
@@ -257,7 +259,7 @@
                     (eval-all (cdr c) env))
                 (cond-env (cdr clauses) env))))))
     
-    (cond-env clauses (env-ref 1))))
+    (cond-env clauses (env-tail 1))))
 
 #|
 (assert-equal
@@ -309,7 +311,7 @@
               (eval-all (cdr c) env)
               (case-env key (cdr clauses) env))))))
     
-    (case-env (eval-prev key) clauses (env-ref 1))))
+    (case-env (eval-prev key) clauses (env-tail 1))))
 
 (assert-equal
   (case 10
