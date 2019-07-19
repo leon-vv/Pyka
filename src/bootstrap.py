@@ -10,9 +10,6 @@ import readline
 import operator as op
 import collections.abc as cabc
 
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
-
 from functools import reduce
 from parsec import *
 
@@ -792,55 +789,24 @@ def setup_repl_history():
     atexit.register(readline.write_history_file, histfile)
 
 # Read-Eval-Print
-def rep(env):
-    try:
-        i = input("> ")
-        print("Input: \t\t", i.__repr__())
-        expr = datum.parse_strict(i)
-        print("Parsed: \t", scheme_repr(expr))
-        print("Evaluated: \t", scheme_repr(eval(env, expr)))
-    except Exception as e:
-        handle_exception(env, e)
+def repl(env):
+    while True: 
+        try:
+            i = input("> ")
+            print("Input: \t\t", i.__repr__())
+            expr = datum.parse_strict(i)
+            print("Parsed: \t", scheme_repr(expr))
+            print("Evaluated: \t", scheme_repr(eval(env, expr)))
+        except Exception as e:
+            handle_exception(env, e)
 
-def on_file_modify(file_name, callback):
-    obs = Observer()
-    handler = PatternMatchingEventHandler([file_name])
-    #handler.on_modified = lambda e: callback(e)
-    obs.schedule(handler, os.path.dirname(file_name))
-    obs.start()
- 
 if __name__ == '__main__':
     
     env = new_global_env()
-    reload = False
-    
-    def reset():
-        global env
-        print('\nInput file changed. Reloading.')
-        env = new_global_env()
-        read_execute_file(env, sys.argv[1])
      
     if len(sys.argv) > 1:
-         
         read_execute_file(env, sys.argv[1])
-         
-        def modified(e):
-            global reload
-             
-            current_input = readline.get_line_buffer()
-            if current_input == '':
-                reset()
-                print('> ', end='', flush=True)
-            else:
-                reload = True
-         
-        on_file_modify(sys.argv[1], modified)
      
     setup_repl_history() 
-    
-    while True:
-        if reload:
-            reset()
-            reload = False
-        rep(env)
+    repl(env)
 
