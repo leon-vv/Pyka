@@ -708,7 +708,10 @@ def new_global_env():
     'env-keys': fn(env_keys),
     'env-values': fn(env_values),
     'env-ref': fn(env_ref),
-    'env-exists?': fn(env_exists)
+    'env-exists?': fn(env_exists),
+    
+    # Misc
+    'command-line': fn(lambda: Cons.from_iterator(sys.argv)),
     }, emptyList)
 
     for key, val in env.car().items():
@@ -733,7 +736,7 @@ def eval(env, expr):
     if isinstance(expr, Symbol):
         res = env_ref(env, expr)
         if res == None:
-            raise ValueError('Key %s could not be found in environment' % sym.str)
+            raise ValueError('Key %s could not be found in environment' % expr.str)
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # It's a list

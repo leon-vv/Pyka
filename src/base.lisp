@@ -149,17 +149,27 @@
               (quasiquote-cons-env c env)))))
       
     (quasiquote-env val (env-tail 1))))
- 
-(define assert-equal
-  (d-fexpr (code res)
-    (let ((code-ev (eval-prev code))
-          (res-ev (eval-prev res)))
-      (if (equal? code-ev res-ev)
-          '()
-          (begin
-            (print "Failed test: " code " not equal to " res
-                   "\nFirst argument evaluated to: " code-ev
-                   "\nSecond argument evaluated to: " res-ev " \n"))))))
+
+(define member
+  (d-fun (obj list)
+    (if (null? list)
+      #f
+      (if (equal? obj (car list))
+        list
+        (member obj (cdr list))))))
+
+(if (member "--test" (command-line))
+  (define assert-equal
+    (d-fexpr (code res)
+      (let ((code-ev (eval-prev code))
+            (res-ev (eval-prev res)))
+        (if (equal? code-ev res-ev)
+            '()
+            (begin
+              (print "Failed test: " code " not equal to " res
+                    "\nFirst argument evaluated to: " code-ev
+                    "\nSecond argument evaluated to: " res-ev " \n"))))))
+  (define assert-equal (d-fun ())))
  
 (assert-equal (+ 1 2) 3)
 (assert-equal (last '(1 2 3)) 3)
@@ -261,20 +271,22 @@
     
     (cond-env clauses (env-tail 1))))
 
-#|
 (assert-equal
   (cond (#t 10)) 10)
+
 (assert-equal
   (cond (#f) (else (+ 1 2))) 3)
+
 (assert-equal
   (cond ((equal? 5 5) 10))
   10)
+
 (assert-equal
   (cond
     ((and (equal? 5 5) (< 10 5)) 1)
     ((or (equal? 5 5) (< 10 5)) 2))
   2)
-|#
+
 (assert-equal
   (begin
     (let ((pat '(+ 1 1)))
@@ -367,7 +379,5 @@
 
 (def-macro prepend-to (variable value)
   `(set! ,variable (cons ,value ,variable)))
-
-
 
 
