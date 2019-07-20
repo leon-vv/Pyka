@@ -501,6 +501,23 @@ def map_(env, args):
     
     return lst.map(lambda e: f(env, env, Cons(e, emptyList), evaluate=False))
 
+def reverse(env, args):
+    x = list(args.car())
+    x.reverse()
+    return Cons.from_iterator(x)
+ 
+def append(env, args):
+    if args == emptyList:
+        return emptyList
+   
+    new_lst = []
+    
+    for l in args:
+        for val in l:
+            new_lst.append(val)
+     
+    return Cons.from_iterator(new_lst)
+
 ### String
 
 def string_to_number(env, args):
@@ -652,6 +669,8 @@ def new_global_env():
     'length': fn(lambda l: len(l)),
     'list->vector': fn(lambda l: list(l)),
     'map': PC(map_, True),
+    'reverse': PC(reverse, True),
+    'append': PC(append, True),
 
     # Vector
     'vector?': fn(lambda x: isinstance(x, list)),

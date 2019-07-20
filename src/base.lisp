@@ -23,19 +23,6 @@
   (d-fun (env)
     (map hash-table-copy env)))
 
-(define append
-  (d-fun lsts
-      (if (null? lsts)
-        '()
-        (if (null? (cdr lsts)) ; Optimisation
-          (car lsts)
-          (if (null? (car lsts))
-              (apply append (cdr lsts))
-              (cons (car (car lsts))
-                    (apply append
-                      (cons (cdr (car lsts))
-                            (cdr lsts)))))))))
-
 ; Differs from RSR7 'list-tail' function
 ; in that (> k (length lst)) does not cause an error
 (define list-skip-n
@@ -171,6 +158,10 @@
                     "\nSecond argument evaluated to: " res-ev " \n"))))))
   (define assert-equal (d-fun ())))
  
+(assert-equal (append '() '() '()) '())
+(assert-equal (append) '())
+(assert-equal (append '() '(1 2 3) '() '(4 5)) '(1 2 3 4 5))
+
 (assert-equal (+ 1 2) 3)
 (assert-equal (last '(1 2 3)) 3)
 
