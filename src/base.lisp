@@ -31,7 +31,7 @@
       lst
       (list-skip-n (cdr lst) (- k 1)))))
 
-(define env-tail
+(define get-env-tail
   (d-fun nth
     (list-skip-n (get-env)
       (if (null? nth) 1 (+ (car nth) 1)))))
@@ -48,7 +48,7 @@
 
 (define eval-nth
 	(d-fun (expr nth)
-		(eval expr (env-tail (+ nth 1)))))
+		(eval expr (get-env-tail (+ nth 1)))))
 
 (define eval-prev
   (d-fun (expr)
@@ -135,7 +135,7 @@
               (eval (car (cdr c)) env)
               (quasiquote-cons-env c env)))))
       
-    (quasiquote-env val (env-tail 1))))
+    (quasiquote-env val (get-env-tail 1))))
 
 (define member
   (d-fun (obj list)
@@ -156,7 +156,7 @@
               (print "Failed test: " code " not equal to " res
                     "\nFirst argument evaluated to: " code-ev
                     "\nSecond argument evaluated to: " res-ev " \n"))))))
-  (define assert-equal (d-fun ())))
+  (define assert-equal (d-fexpr ())))
  
 (assert-equal (append '() '() '()) '())
 (assert-equal (append) '())
@@ -198,11 +198,11 @@
 
 (define l-fun
   (d-fexpr (args . body)
-    (cons (eval-prev `(d-fun ,args ,@body)) (env-tail 1))))
+    (cons (eval-prev `(d-fun ,args ,@body)) (get-env-tail 1))))
 
 (define l-fexpr
   (d-fexpr (args . body)
-    (cons (eval-prev `(d-fexpr ,args ,@body)) (env-tail 1))))
+    (cons (eval-prev `(d-fexpr ,args ,@body)) (get-env-tail 1))))
 
 (define set!
   (d-fexpr (var val)
@@ -217,7 +217,7 @@
                     (hash-table-set! ht var val)
                     (set!-env var val (cdr env)))))))
     
-    (set!-env var (eval-prev val) (env-tail 1))))
+    (set!-env var (eval-prev val) (get-env-tail 1))))
 
 (define counter
   (d-fun (n)
@@ -260,7 +260,7 @@
                     (eval-all (cdr c) env))
                 (cond-env (cdr clauses) env))))))
     
-    (cond-env clauses (env-tail 1))))
+    (cond-env clauses (get-env-tail 1))))
 
 (assert-equal
   (cond (#t 10)) 10)
@@ -314,7 +314,7 @@
               (eval-all (cdr c) env)
               (case-env key (cdr clauses) env))))))
     
-    (case-env (eval-prev key) clauses (env-tail 1))))
+    (case-env (eval-prev key) clauses (get-env-tail 1))))
 
 (assert-equal
   (case 10
