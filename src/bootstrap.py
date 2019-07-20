@@ -25,6 +25,10 @@ current_output_port = sys.stdout
 
 ################### Data types
 
+def is_truthy(val):
+    # According to RSR7 only #f is a false value
+    return not (val == False)
+
 class Symbol:
     def __init__(self, s, line=None):
         self.str = s
@@ -373,7 +377,7 @@ def undefine(env, args):
 def if_(env, args):
     cdr = args.cdr()
     cddr = cdr.cdr()
-    if eval(env, args.car()):
+    if is_truthy(eval(env, args.car())):
         return eval(env, cdr.car())
     elif cddr != emptyList:
         return eval(env, cddr.car())
@@ -434,8 +438,10 @@ continuation_id = 0
 
 def call_cc(env, args):
 
-    global continuation_id
+    global continuation_id, eval_stack
+     
     id_ = continuation_id
+    stack_len = len(eval_stack)
     continuation_id += 1
      
     def raise_(env, args=emptyList):
@@ -443,11 +449,12 @@ def call_cc(env, args):
         raise ResumeFromContinuation(val, id_)
       
     continuation = PythonCallable(raise_, True)
-        
+      
     try:
         return args.car()(env, env, Cons(continuation, emptyList))
     except ResumeFromContinuation as r:
         if r.id == id_:
+            eval_stack = eval_stack[0:stack_len]
             return r.val
         else:
             raise
@@ -466,7 +473,7 @@ def and_(env, args):
     for v in args:
         last = eval(env, v)
             
-        if not last:
+        if not is_truthy(last):
             return False
 
     return last
@@ -474,9 +481,10 @@ def and_(env, args):
 def or_(env, args):
     for v in args:
         last = eval(env, v)
-
-        if last: return last
         
+        if is_truthy(last):
+            return last
+     
     return False
 
 
@@ -641,7 +649,7 @@ def new_global_env():
     'max': fn(max),
     
     # Boolean
-    'not': fn(lambda b: not b),
+    'not': fn(lambda b: b == False),
     'boolean?': fn(lambda b: isinstance(b, bool)),
     'and': PC(and_, False),
     'or': PC(or_, False),
