@@ -587,7 +587,7 @@ def env_keys(env):
     key_set = set()
     for h in env:
         key_set.update(h.keys())
-    return Cons.from_iterator(key_set)
+    return Cons.from_iterator(map(Symbol, key_set))
 
 def env_values(env):
     value_set = set()
@@ -669,7 +669,7 @@ def new_global_env():
     
     # List
     'pair?': fn(lambda c: isinstance(c, Cons)),
-    'list?': fn(lambda c: isinstance(c, Cons) and c.is_list),
+    'list?': fn(lambda c: c == emptyList or (isinstance(c, Cons) and c.is_list)),
     'cons': fn(lambda a, b: Cons(a, b)),
     'car': fn(lambda x: x.car()),
     'cdr': fn(lambda x: x.cdr()),
