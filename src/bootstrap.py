@@ -369,6 +369,7 @@ def define(env, args):
         val.name = name # Better stack trace
      
     env.car()[name] = val
+    return val
 
 def undefine(env, args):
   name = args.car().str

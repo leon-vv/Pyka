@@ -214,7 +214,7 @@
               
               (let ((ht (car env)))
                 (if (hash-table-exists? ht var)
-                    (hash-table-set! ht var val)
+                    (begin (hash-table-set! ht var val) val)
                     (set!-env var val (cdr env)))))))
     
     (set!-env var (eval-prev val) (get-env-tail 1))))
