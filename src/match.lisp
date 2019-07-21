@@ -8,20 +8,23 @@
 ; Returns true if infinite repeater (... or ___)
 ; Returns a number if k-repeater (..k or __k)
 ; Returns false if not a repeater
-(def-d-fun parse-repeater (symbol)
-  (lets str (symbol->string symbol)
-    (case (substring str 0 2)
-      ((".." "__")
-        (case (substring str 2 3)
-          (("." "_") #t)
-          (else (string->number (substring str 2)))))
-      (else #f))))
+(def-d-fun parse-repeater (val)
+  (if (symbol? val)
+    (lets str (symbol->string val)
+      (case (substring str 0 2)
+        ((".." "__")
+          (case (substring str 2 3)
+            (("." "_") #t)
+            (else (string->number (substring str 2)))))
+        (else #f)))
+    #f))
 
 (assert-equal (parse-repeater '...) #t)
 (assert-equal (parse-repeater '___) #t)
 (assert-equal (parse-repeater '__55) 55)
 (assert-equal (parse-repeater '__0) 0)
 (assert-equal (parse-repeater '__abc) #f)
+(assert-equal (parse-repeater 10) #f)
 
 ; Let's define a 'matcher' as a function which
 ; takes a value to match, a pattern and an environment.
@@ -50,24 +53,88 @@
     ((and (list? pat) (not (null? pat)))
       (if (equal? (car pat) 'unquote)
         (match-pat val (car (cdr pat)) env)
-        (match-list val pat env match-qp)))))
+        (match-list val pat env #f match-qp)))))
 
-(def-d-fun match-list (val pats env matcher)
-  (if (and (null? val) (null? pats))
-    '()
-    (if (or (null? val) (null? pats))
-      #f 
+; Copy the bindings in source-env 
+; over to the LISTS in ht
+(def-d-fun copy-env-into-ht (ht source-env)
+  (do ((keys (env-keys source-env) (cdr keys)))
+       ((null? keys) ht)
+    (lets val (env-ref source-env (car keys)) ; car keys lol
+      (if (hash-table-exists? ht (car keys))
+        (hash-table-set! ht (car keys) (cons val (hash-table-ref ht (car keys))))
+        (hash-table-set! ht (car keys) (list val))))))
+
+(assert-equal
+  (let ((ht1 (make-hash-table))
+       (ht2 (make-hash-table)))
+    (hash-table-set! ht1 'abc '(1 2))
+    (hash-table-set! ht2 'abc '("abc"))
+    (hash-table-set! ht2 'def 10)
+    
+    (copy-env-into-ht ht1 (list (make-hash-table) ht2 (make-hash-table)))
+    (list
+      (hash-table-ref ht1 'abc)
+      (hash-table-ref ht1 'def)))
+  '((("abc") 1 2) (10)))
+
+(def-d-fun reverse-ht (ht)
+  (do ((keys (hash-table-keys ht) (cdr keys)))
+      ((null? keys) ht)
+    (hash-table-set! ht (car keys) (reverse (hash-table-ref ht (car keys))))))
+
+(def-d-fun match-lvp (val-list pat env repeater matcher)
+  (with/cc return
+    (lets bind (make-hash-table)
+      (do ((i 0 (+ i 1))
+          (val-list val-list (cdr val-list))) (#f)
+
+        (if (and (number? repeater) (equal? i repeater))
+          (return (list val-list (reverse-ht bind))))
+        (if (or (not (pair? val-list)) (null? val-list))
+          (return (and (not (number? repeater))
+                       (list val-list (reverse-ht bind)))))
+
+        (lets newbind (matcher (car val-list) pat env)
+          (if newbind
+            (copy-env-into-ht bind newbind)
+            (return #f)))))))
+
+(def-d-fun match-list (val pats env support-lvp matcher)
+  (cond
+    ((and (null? val) (null? pats)) '())
+    ((or (null? val) (null? pats)) #f)
+    ((and support-lvp
+          (not (null? (cdr pats)))
+          (define r (parse-repeater (car (cdr pats)))))
+      (lets result (match-lvp val (car pats) env r matcher)
+        (and result (lets other-bind (match-list (car result)
+                                               (cdr (cdr pats))
+                                               (append (cdr result) env)
+                                               support-lvp
+                                               matcher)
+                        (append (cdr result) other-bind)))))
+    (else
       (lets bind (matcher (car val) (car pats) env)
         (and bind
-          (lets other-bind (match-list (cdr val) (cdr pats) (append bind env) matcher)
+          (lets other-bind (match-list (cdr val) 
+                                       (cdr pats)
+                                       (append bind env)
+                                       support-lvp
+                                       matcher)
             (and other-bind (append bind other-bind))))))))
 
 (def-d-fun match-list-rest (val pats env)
   (cond
-    ((or (null? val) (null? pats)) #f)
-    ((null? (cdr pats))
+    ((not (or (pair? val) (null? (cdr pats)))) #f) ; more pats than val remaining
+    ((null? pats) #f) ; more val than pats remaining
+    ((null? (cdr pats)) ; last pat
       (match-pat val (car pats) env))
-    (else
+    ((define r (parse-repeater (car (cdr pats))))
+       (lets result (match-lvp val (car pats) env r match-qp)
+        (and result
+             (match-list-rest (car result) (cdr (cdr pats)) (append (cdr result) env)))))
+    (else 
       (lets bind (match-pat (car val) (car pats) env)
         (and bind
           (lets other-bind (match-list-rest (cdr val) (cdr pats) (append bind env))
@@ -105,7 +172,7 @@
           ((quasiquote)
             (match-qp val (car (cdr pat)) env))
           ((list)
-            (if (list? val) (match-list val (cdr pat) env match-pat) #f))
+            (if (list? val) (match-list val (cdr pat) env #t match-pat) #f))
           ((list-rest)
             (if (pair? val) (match-list-rest val (cdr pat) env) #f))
           ((cons)
@@ -192,6 +259,35 @@
   3)
 
 (assert-equal
+  (match '(1 2 3)
+    ((list 1 a ...) a))
+  '(2 3))
+
+(assert-equal
+  (match '(1 2 3)
+    ((list 1 a ..3) a)
+    (_ 'else))
+  'else)
+
+(assert-equal
+  (match '(1 2 3 4)
+    ((list 1 a ..3) a)
+    (_ 'else))
+  '(2 3 4))
+
+(assert-equal
+  (match '(1 2 3 4 5)
+    ((list 1 a ..3 5) a)
+    (_ 'else))
+  '(2 3 4))
+
+(assert-equal
+  (match '(1 (2) (2) (2) 5)
+    ((list 1 (list a) ..3 5) a)
+    (_ 'else))
+  '(2 2 2))
+
+(assert-equal
   (match "yes"
     ("no" #f)
     ("yes" #t))
@@ -203,9 +299,30 @@
   '(3 2 1))
 
 (assert-equal
+  (match '(1 2 . 3)
+    ((list-rest a b c d) a))
+  #f)
+
+(assert-equal
   (match '(1 2 3 . 4)
     ((list-rest a b c d) d))
   4)
+(def-d-fun match-lvp (val-list pat env repeater matcher)
+  (with/cc return
+    (lets bind (make-hash-table)
+      (do ((i 0 (+ i 1))
+          (val-list val-list (cdr val-list))) (#f)
+
+        (if (and (number? repeater) (equal? i repeater))
+          (return (list val-list bind)))
+        (if (or (not (pair? val-list)) (null? val-list))
+          (return (and (not (number? repeater)) (list val-list bind))))
+
+        (lets newbind (matcher (car val-list) pat env)
+          (if newbind
+            (copy-env-into-ht bind newbind)
+            (return #f)))))))
+
 
 (assert-equal
   (match (cons 1 2)
@@ -259,9 +376,6 @@
   (match '(1 2 3)
     (`(1 ,a 3) a))
   2)
-
-
-
 
 
 
