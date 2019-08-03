@@ -170,18 +170,19 @@
           (hash-table-set-symbol! control-flow-ht next)
           (add-gatherings control-flow-ht base-env set-return)
           
-          (eval initially (cons control-flow-ht base-env))
-
+          (map next (hash-table-keys gen-ht)) ; Initialise variables
+          (eval-all initially (cons control-flow-ht base-env))
+          
           (do () (#f)
           
-            (if (and repeat (< (set! repeat (- repeat 1)) 1)) (finish))
+            (if (and repeat (< (set! repeat (- repeat 1)) 0)) (finish))
             (map next (hash-table-keys is-for))
 
-            (eval (cons 'begin code) (cons control-flow-ht base-env))))))
+            (eval-all code (cons control-flow-ht base-env)))))
 
-    (if (null? finally) ; Return implicit ret-val used by gatherings if there's no 'finally' block
-      ret-val
-      (eval-all finally (cons control-flow-ht base-env)))))
+      (if (null? finally) ; Return implicit ret-val used by gatherings if there's no 'finally' block
+        ret-val
+        (eval-all finally (cons control-flow-ht base-env))))))
 
 (assert-equal
   (lets g (numer-gen 1 3 1)
@@ -210,7 +211,7 @@
 
 (assert-equal
   (iter (generating x in '(1 2 3))
-    (leave (next x)))
+    (leave (next 'x)))
   2)
 
 (assert-equal
@@ -226,5 +227,4 @@
       (if (equal? y 3) (finish))
       (finally x)))
   10)
-
 
