@@ -203,7 +203,6 @@
           (else (error "Unrecognized pattern")))))
 
     (else (error "Unrecognized pattern"))))
-      
 
 (def-d-fexpr match (expr . clauses)
   
@@ -217,9 +216,11 @@
           (lets res (match-pat val (car (car clauses)) '())
             (if res
               (return (eval-all (cdr (car clauses)) (append res env)))))))))
- 
+
+
 ; These test cases are taken from 
 ; https://docs.racket-lang.org/reference/match.html
+
 
 (assert-equal
   (match 1 
@@ -307,21 +308,6 @@
   (match '(1 2 3 . 4)
     ((list-rest a b c d) d))
   4)
-(def-d-fun match-lvp (val-list pat env repeater matcher)
-  (with/cc return
-    (lets bind (make-hash-table)
-      (do ((i 0 (+ i 1))
-          (val-list val-list (cdr val-list))) (#f)
-
-        (if (and (number? repeater) (equal? i repeater))
-          (return (list val-list bind)))
-        (if (or (not (pair? val-list)) (null? val-list))
-          (return (and (not (number? repeater)) (list val-list bind))))
-
-        (lets newbind (matcher (car val-list) pat env)
-          (if newbind
-            (copy-env-into-ht bind newbind)
-            (return #f)))))))
 
 
 (assert-equal
@@ -352,6 +338,11 @@
   1)
 
 (assert-equal
+  (match '(for 5)
+    (`(,(or 'for 'generating) ,x) x))
+  5)
+
+(assert-equal
   (match '(1 2 3)
    ((list (not 4) (not 4) (not 4)) 'yes)
    (_ 'no))
@@ -376,11 +367,4 @@
   (match '(1 2 3)
     (`(1 ,a 3) a))
   2)
-
-
-
-
-
-
-
 
