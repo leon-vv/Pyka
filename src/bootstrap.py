@@ -26,8 +26,12 @@ current_output_port = sys.stdout
 ################### Data types
 
 def is_truthy(val):
+    return not is_falsey(val)
+
+def is_falsey(val):
     # According to RSR7 only #f is a false value
-    return not (val == False)
+    # First check fails for number 0
+    return isinstance(val, bool) and val == False
 
 class Symbol:
     def __init__(self, s, line=None):
@@ -393,7 +397,7 @@ def do(env, args):
     
     test = args.cdr().car()
     
-    while not is_truthy(eval(Cons(dct, env), test.car())):
+    while is_falsey(eval(Cons(dct, env), test.car())):
         for c in args.cdr().cdr():
             eval(Cons(dct, env), c)
          
@@ -474,7 +478,7 @@ def and_(env, args):
     for v in args:
         last = eval(env, v)
             
-        if not is_truthy(last):
+        if is_falsey(last):
             return False
 
     return last
