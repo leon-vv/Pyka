@@ -491,6 +491,10 @@ def or_(env, args):
 
 ### Hash table
 
+def hash_table_set(ht, sym, val):
+    ht[sym.str] = val
+    return val
+
 def hash_table_merge(env, args):
     args.car().update(args.cdr().car())
     return args.car()
@@ -667,7 +671,7 @@ def new_global_env():
     'hash-table-merge!': PC(hash_table_merge, True),
     'hash-table-walk': PC(hash_table_walk, True),
     'hash-table-exists?': fn(lambda h, k: k.str in h),
-    'hash-table-set!': fn(lambda h, k, v: h.__setitem__(k.str, v)),
+    'hash-table-set!': fn(hash_table_set),
     'hash-table-copy': fn(lambda h: dict(h)),
     
     # List
