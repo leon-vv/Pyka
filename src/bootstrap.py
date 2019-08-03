@@ -393,7 +393,7 @@ def do(env, args):
     
     test = args.cdr().car()
     
-    while not eval(Cons(dct, env), test.car()):
+    while not is_truthy(eval(Cons(dct, env), test.car())):
         for c in args.cdr().cdr():
             eval(Cons(dct, env), c)
          
@@ -648,6 +648,8 @@ def new_global_env():
     '=': fn(op.eq),
     'min': fn(min),
     'max': fn(max),
+    'even': fn(lambda n: n % 2 == 0),
+    'odd': fn(lambda n: n % 2 == 1),
     
     # Boolean
     'not': fn(lambda b: b == False),
@@ -661,6 +663,7 @@ def new_global_env():
     'hash-table-keys': fn(lambda h: Cons.from_iterator(map(Symbol, h.keys()))),
     'hash-table-values': fn(lambda h: Cons.from_iterator(h.values())),
     'hash-table-ref': fn(lambda h, k: h[k.str]),
+    'hash-table-ref/default': fn(lambda h, k, d: h[k.str] if k.str in h else d),
     'hash-table-merge!': PC(hash_table_merge, True),
     'hash-table-walk': PC(hash_table_walk, True),
     'hash-table-exists?': fn(lambda h, k: k.str in h),
