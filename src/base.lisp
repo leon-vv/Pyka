@@ -13,7 +13,7 @@
 
 (define error
   (d-fun msgs
-    (apply print-string msgs)
+    (apply print msgs)
     (exit 1)))
 
 (define call/cc call-with-current-continuation)
@@ -89,6 +89,17 @@
               (pretty-list val indent))))))
 
     (at-indent indent (pretty-string-aux val indent))))
+
+(define assert
+  (d-fexpr args
+    (define expr
+      (if (= (length args) 1)
+          (car args)
+          (list '= (car args) (car (cdr args)))))
+    (let ((res (eval-prev expr)))
+      (if (not res)
+        (error "======= ASSERTION FAILED ====== \n"
+              (pretty-string expr 0))))))
 
 (define debug
   (d-fexpr (v)
