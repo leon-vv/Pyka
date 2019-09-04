@@ -10,6 +10,7 @@ import readline
 import operator as op
 import collections.abc as cabc
 
+from itertools import chain
 from functools import reduce
 from parsec import *
 
@@ -80,11 +81,7 @@ class Cons(cabc.Sequence):
             i = i - 1
         
         return x
-
-    def __call__(self, env, p_env, args, evaluate=None):
-        assert evaluate == None or isinstance(evaluate, bool)
-        return self.car()(self.cdr(), p_env, args, evaluate) 
-     
+    
     # Structure preserving map
     # If 'self' is a pair, a pair will be returned
     def map(self, fun):
@@ -130,74 +127,84 @@ class Cons(cabc.Sequence):
         else:
             return False
 
-# When SchemeCallable or PythonCallable are evaluated,
-# they are passed an environment in which
-# their 'body' should be evaluated (env) and an environment
-# in which their parameters are evaluated (p_env).
-
 class PythonCallable:
     def __init__(self, fn, evaluate):
         self.fn = fn
         self.evaluate = evaluate
         self.name = fn.__name__
     
-    def __call__(self, env, p_env, args, evaluate=None):
-        assert evaluate == None or isinstance(evaluate, bool)
-        
-        if evaluate == None: evaluate = self.evaluate
-        if evaluate: args = eval_all(env, args)
-              
+    def apply(self, env, args):
         return self.fn(env, args)
+    
+    def __call__(self, env, args):
+        return self.fn(env, eval_all(env, args) if self.evaluate else args)
     
     def scheme_repr(self):
         return "{BultinFunction %s}" % self.name
 
+def params_args_to_dict(params, args, name):
+    dct = {}
+    
+    while True:
+        if params == emptyList:
+            if args != emptyList:
+                raise ValueError('Too many arguments supplied to SchemeCallable ' + name)
+            return dct
+        elif isinstance(params, Cons):
+            if args == emptyList:
+                printd(params)
+                printd(args)
+                raise ValueError('Not enough arguments supplied to SchemeCallable ' + name)
+            dct[params.car().str] = args.car()
+        else:
+            assert isinstance(params, Symbol)
+            dct[params.str] = args
+            return dct
+
+        params = params.cdr()
+        args = args.cdr()
+     
+    return dct
+        
 # Dynamically scoped function
 class SchemeCallable:
     def __init__(self, params, body, type):
         self.params, self.body, self.type, self.name = params, body, type, None
-
-    def __call__(self, env, p_env, args, evaluate=None):
-        assert evaluate == None or isinstance(evaluate, bool)
-         
-        if evaluate == None: evaluate = self.type == 'd-fun'
-       
-        if evaluate: args = eval_all(p_env, args)
-
-        if isinstance(self.params, Cons):
-            dct = {}
-            args_pointer = args
-            parms_pointer = self.params
-            
-            while isinstance(parms_pointer, Cons):
-                if not isinstance(args_pointer, Cons):
-                    raise ValueError('Not enough arguments supplied to SchemeCallable ' + self.name)
-
-                dct[parms_pointer.car().str] = args_pointer.car()
-                parms_pointer = parms_pointer.cdr()
-                args_pointer = args_pointer.cdr()
-             
-            # If we have an arg list of the form (arg1 . argrest)
-            # here we bind argrest
-            if parms_pointer != emptyList:
-                dct[parms_pointer.str] = args_pointer
-            elif args_pointer != emptyList:
-                raise ValueError('Too many arguments supplied to SchemeCallable ' + self.name)
-        
-        elif isinstance(self.params, Symbol):
-            dct = {self.params.str: args}
-        elif self.params == emptyList:
-            dct = {}
-        else:
-            raise ValueError('SchemeCallable: unknown parameter type')
-         
+        self.evaluate = type == 'd-fun'
+    
+    def apply(self, env, args):
+        n = self.name if self.name != None else self.scheme_repr()
+        dct = params_args_to_dict(self.params, args, n)
         return eval_all_ret_last(Cons(dct, env), self.body)
+
+    def __call__(self, env, args):
+        return self.apply(env, eval_all(env, args) if self.evaluate else args)
      
     def scheme_repr(self):
         if self.name != None:
             return "{%s %s}" % (self.type, self.name)
         else:
             return "{%s}" % (self.type)
+
+class CurriedCallable:
+    def __init__(self, callable, args):
+        self.callable = callable
+        self.curried_args = args
+        self.evaluate = self.callable.evaluate
+     
+    def get_args_list(self, args):
+        return Cons.from_iterator(chain(self.curried_args, args))
+    
+    def apply(self, env, args):
+        return self.callable.apply(env,
+            Cons.from_iterator(chain(self.curried_args, args)))
+    
+    def __call__(self, env, args):
+        ev = self.callable.evaluate
+        return self.apply(env, eval_all(env, args) if ev else args)
+    
+    def scheme_repr(self):
+        return "{%s curried %d}" % (self.callable.scheme_repr(), len(self.curried_args)) 
 
 def scheme_repr(val):
     ii = isinstance
@@ -456,7 +463,7 @@ def call_cc(env, args):
     continuation = PythonCallable(raise_, True)
       
     try:
-        return args.car()(env, env, Cons(continuation, emptyList))
+        return args.car()(env, Cons(continuation, emptyList))
     except ResumeFromContinuation as r:
         if r.id == id_:
             eval_stack = eval_stack[0:stack_len]
@@ -507,7 +514,7 @@ def hash_table_walk(env, args):
     h = args.car()
     proc = args.cdr().car()
     for k, v in h.items():
-        proc(env, env, Cons(Symbol(k), Cons(v, emptyList)), evaluate=False)
+        proc.apply(env, Cons(Symbol(k), Cons(v, emptyList)))
 
 ### List
 
@@ -516,7 +523,7 @@ def map_(env, args):
     lst = args.cdr().car()
     if lst == emptyList: return emptyList
     
-    return lst.map(lambda e: f(env, env, Cons(e, emptyList), evaluate=False))
+    return lst.map(lambda e: f.apply(env, Cons(e, emptyList)))
 
 def reverse(env, args):
     x = list(args.car())
@@ -534,6 +541,15 @@ def append(env, args):
             new_lst.append(val)
      
     return Cons.from_iterator(new_lst)
+
+def list_tail(env, args):
+    list = args.car()
+    k = args.cdr().car()
+     
+    while k > 0:
+        list = list.cdr()
+        k -= 1
+    return list
 
 ### String
 
@@ -561,7 +577,7 @@ def with_input_from_file(env, file_name, proc):
     global current_input_port
     tmp = current_input_port
     current_input_port = open(file_name, 'r')
-    proc(env, p_env)
+    proc(env)
     current_input_port.close()
     current_input_port = tmp
 
@@ -569,7 +585,7 @@ def with_output_to_file(env, file_name, proc):
     global current_input_port
     tmp = current_input_port
     current_input_port = open(file_name, 'r')
-    proc(env, p_env)
+    proc(env)
     current_input_port.close()
     current_input_port = tmp
 
@@ -589,7 +605,7 @@ def env_walk(env, args):
         for (k, v) in h.items():
             if not (k in key_set):
                 key_set.add(k)
-                proc(env, env, Cons(k, Cons(v, emptyList)))
+                proc(env, Cons(k, Cons(v, emptyList)))
 
 def env_keys(env):
     key_set = set()
@@ -639,8 +655,10 @@ def new_global_env():
     'let*': PC(let_star, False),
     'call-with-current-continuation': PC(call_cc, True),
     'get-env': PC(lambda env, args: env, True),
-    
-    'apply': PC(lambda env, args: args.car()(env, env, args[1], evaluate=False), True),
+    'curry': PC(lambda env, args: CurriedCallable(args.car(), args.cdr()), True),
+
+     
+    'apply': PC(lambda env, args: args.car().apply(env, args[1]), True),
     'load': PC(load, True),
     'procedure?': fn(lambda p: isinstance(p, PC) or isinstance(p, SC)),
     
@@ -691,6 +709,7 @@ def new_global_env():
     'map': PC(map_, True),
     'reverse': PC(reverse, True),
     'append': PC(append, True),
+    'list-tail': PC(list_tail, True),
 
     # Vector
     'vector?': fn(lambda x: isinstance(x, list)),
@@ -779,7 +798,7 @@ def eval(env, expr):
     elif not isinstance(expr, Cons): # Constant literal
         res = expr 
     else: # It's a list
-        res = eval(env, expr.car())(env, env, expr.cdr())
+        res = eval(env, expr.car())(env, expr.cdr())
     
     eval_stack.pop()
     return res

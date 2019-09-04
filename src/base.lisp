@@ -23,18 +23,9 @@
   (d-fun (env)
     (map hash-table-copy env)))
 
-; Differs from RSR7 'list-tail' function
-; in that (> k (length lst)) does not cause an error
-(define list-skip-n
-  (d-fun (lst k)
-    (if (or (null? lst) (equal? k 0))
-      lst
-      (list-skip-n (cdr lst) (- k 1)))))
-
 (define get-env-tail
-  (d-fun nth
-    (list-skip-n (get-env)
-      (if (null? nth) 1 (+ (car nth) 1)))))
+  (d-fun (nth)
+    (list-tail (get-env) (+ nth 1))))
 
 (define last
   (d-fun (lst)
@@ -53,7 +44,6 @@
 (define eval-prev
   (d-fun (expr)
     (eval-nth expr 2)))
-
 
 (define pretty-string
   (d-fun (val indent)
@@ -167,7 +157,7 @@
               (print "Failed test: " code " not equal to " res
                     "\nFirst argument evaluated to: " code-ev
                     "\nSecond argument evaluated to: " res-ev " \n"))))))
-  (define assert-equal (d-fexpr ())))
+  (define assert-equal (d-fexpr _)))
  
 (assert-equal (append '() '() '()) '())
 (assert-equal (append) '())
@@ -178,10 +168,6 @@
 
 (assert-equal (last '(1)) 1)
 (assert-equal (begin 1 2 3) 3)
-
-(assert-equal (list-skip-n '(1 2 3) 0) '(1 2 3))
-(assert-equal (list-skip-n '() 5) '())
-(assert-equal (list-skip-n '(1 2 3) 1) '(2 3))
 
 (assert-equal (quote (1 2 3)) '(1 2 3))
 (assert-equal `(1 2 ,@(list 3 4)) (list 1 2 3 4))
@@ -207,13 +193,49 @@
         (get-env))
     (cons 1 2))
 
+(define lambdafy
+  (d-fun (env fun wrapper)
+    (curry
+      (wrapper (env fun . args)
+        (eval `(apply ,fun ',args) env))
+      env fun)))
+
 (define l-fun
-  (d-fexpr (args . body)
-    (cons (eval-prev `(d-fun ,args ,@body)) (get-env-tail 1))))
+  (d-fexpr (args . code)
+    (let ((env (get-env-tail 1)))
+      (lambdafy
+        env
+        (eval (cons 'd-fun (cons args code))
+              env)
+        d-fun))))
+
+(define l-fun-e
+  (d-fexpr (args . code)
+    (let ((env (get-env-tail 1)))
+      (curry
+        (lambdafy
+          env
+          (eval (cons 'd-fun (cons args code)) env)
+          d-fun)
+        env))))
 
 (define l-fexpr
   (d-fexpr (args . body)
-    (cons (eval-prev `(d-fexpr ,args ,@body)) (get-env-tail 1))))
+    (let ((env (get-env-tail 1)))
+      (lambdafy
+        env
+        (eval (cons 'd-fexpr (cons args body)) env)
+        d-fexpr))))
+
+(define l-fexpr-e
+  (d-fexpr (args . body)
+    (let ((env (get-env-tail 1)))
+      (curry
+        (lambdafy
+          env
+          (eval (cons 'd-fexpr (cons args body)) env)
+          d-fexpr)
+        env))))
 
 (define set!
   (d-fexpr (var val)
@@ -357,9 +379,14 @@
           ,,@code))))))
 
 (fun-shorthand def-d-fun d-fun)
-(fun-shorthand def-l-fun l-fun)
 (fun-shorthand def-d-fexpr d-fexpr)
+
+(fun-shorthand def-l-fun l-fun)
 (fun-shorthand def-l-fexpr l-fexpr)
+
+(fun-shorthand def-l-fun-e l-fun-e)
+(fun-shorthand def-l-fexpr-e l-fexpr-e)
+
 (fun-shorthand def-macro macro)
 
 (def-macro with/cc (name . code)

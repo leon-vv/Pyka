@@ -76,6 +76,14 @@ class SchemeTest(unittest.TestCase):
         self.eval_test('(and #f a)', False) # a not evaluated
         self.eval_test('(or #t a)', True)
      
+    def test_curry(self):
+        self.eval_test('(((curry curry (d-fun x x) 1 2) 3 4) 5 6)',
+            Cons.from_iterator([1, 2, 3, 4, 5, 6])) 
+
+    def test_list_tail(self):
+        self.eval_test('(list-tail (list 1 2 3 4 5) 2)',
+            Cons.from_iterator([3, 4, 5]))
+
     def test_from_iterator(self):
         self.assertEqual(Cons.from_iterator([1,2]),
                 Cons(1, Cons(2, emptyList)))        
