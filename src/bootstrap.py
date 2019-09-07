@@ -7,6 +7,7 @@ import os
 from io import TextIOWrapper
 import atexit
 import readline
+import argparse
 import operator as op
 import collections.abc as cabc
 
@@ -23,6 +24,8 @@ sys.setrecursionlimit(2500)
 current_input_port = sys.stdin
 current_error_port = sys.stderr
 current_output_port = sys.stdout
+
+search_dirs = [] # Directories to search for modules
 
 ################### Data types
 
@@ -551,6 +554,22 @@ def list_tail(env, args):
         k -= 1
     return list
 
+def list_filter(pred, list):
+    if list == emptyList:
+        return emptyList
+    elif pred(env, Cons(list.car(), emptyList)):
+        return Cons(list.car(), list_filter(pred, list.cdr()))
+    else: 
+        return list_filter(pred, list.cdr())
+
+def list_member(obj, list):
+    while list != emptyList:
+        if list.car() == obj:
+            return list
+        list = list.cdr()
+     
+    return False
+
 ### String
 
 def string_to_number(env, args):
@@ -710,6 +729,8 @@ def new_global_env():
     'reverse': PC(reverse, True),
     'append': PC(append, True),
     'list-tail': PC(list_tail, True),
+    'filter': fn(list_filter),
+    'member': fn(list_member),
 
     # Vector
     'vector?': fn(lambda x: isinstance(x, list)),
@@ -830,11 +851,14 @@ def handle_exception(env, e):
 
 def read_execute_file(env, file_name):
     try:
-        with open(file_name, 'r') as fd:
-            content = fd.read()
-            exprs = datums.parse_strict(content)
-            for e in exprs:
-                eval(env, e)
+        for dir in search_dirs:
+            p = os.path.join(dir, file_name)
+            if os.path.exists(p):
+                with open(p, 'r') as fd:
+                    content = fd.read()
+                    exprs = datums.parse_strict(content)
+                    for e in exprs:
+                        eval(env, e)
     except Exception as e:
         handle_exception(env, e)
 
@@ -864,10 +888,25 @@ def repl(env):
 if __name__ == '__main__':
     
     env = new_global_env()
+
+    parser = argparse.ArgumentParser(description='Pyka reference implementation in Python')
+    parser.add_argument('files', type=str, nargs='*', help='files to process')
+    parser.add_argument('--no-repl', action='store_false', dest='repl', help='do not start Read-Eval-Print-Loop')
+    parser.add_argument('--search', nargs='*', default=[], type=str, \
+                        help='extra directories to search for (base) modules (always tries ./ and ./src first)')
+    parser.add_argument('--no-base', action='store_false', dest='load_base', help='do not load base libraries')
+    args = parser.parse_args()
+    
+    search_dirs = ['./', './src'] + args.search
+    
+    if args.load_base:
+        for f in ['base.lisp', 'match.lisp', 'iter.lisp', 'module.lisp']:
+            read_execute_file(env, f)
+    
+    for f in args.files:
+        read_execute_file(env, f)
      
-    if len(sys.argv) > 1:
-        read_execute_file(env, sys.argv[1])
-     
-    setup_repl_history() 
-    repl(env)
+    if args.repl:
+        setup_repl_history() 
+        repl(env)
 
