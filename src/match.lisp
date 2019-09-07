@@ -1,4 +1,3 @@
-(load "src/base.lisp")
 
 (def-d-fun literal? (val)
   (or (boolean? val)

@@ -1,5 +1,3 @@
-(load "src/match.lisp")
-
 (def-d-fexpr hash-table-set-symbol! (ht sym)
   (hash-table-set! (eval-prev ht) sym (eval-prev sym)))
   
