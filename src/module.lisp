@@ -17,7 +17,7 @@
 
 (def-l-fun require (name import-spec)
   (let ((path (string-append (symbol->string name) ".lisp"))
-        (env (get-env-tail 1))
+        (env (current-env-tail 1))
         (ht (make-hash-table))
         (export-spec #f))
     

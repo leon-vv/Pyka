@@ -23,9 +23,9 @@
   (d-fun (env)
     (map hash-table-copy env)))
 
-(define get-env-tail
+(define current-env-tail
   (d-fun (nth)
-    (list-tail (get-env) (+ nth 1))))
+    (list-tail (current-env) (+ nth 1))))
 
 (define last
   (d-fun (lst)
@@ -39,7 +39,7 @@
 
 (define eval-nth
 	(d-fun (expr nth)
-		(eval expr (get-env-tail (+ nth 1)))))
+		(eval expr (current-env-tail (+ nth 1)))))
 
 (define eval-prev
   (d-fun (expr)
@@ -136,7 +136,7 @@
               (eval (car (cdr c)) env)
               (quasiquote-cons-env c env)))))
       
-    (quasiquote-env val (get-env-tail 1))))
+    (quasiquote-env val (current-env-tail 1))))
 
 (define member
   (d-fun (obj list)
@@ -166,7 +166,7 @@
 
 (define l-fun
   (d-fexpr (args . code)
-    (let ((env (get-env-tail 1)))
+    (let ((env (current-env-tail 1)))
       (lambdafy
         env
         (eval (cons 'd-fun (cons args code))
@@ -175,7 +175,7 @@
 
 (define l-fun-e
   (d-fexpr (args . code)
-    (let ((env (get-env-tail 1)))
+    (let ((env (current-env-tail 1)))
       (curry
         (lambdafy
           env
@@ -185,7 +185,7 @@
 
 (define l-fexpr
   (d-fexpr (args . body)
-    (let ((env (get-env-tail 1)))
+    (let ((env (current-env-tail 1)))
       (lambdafy
         env
         (eval (cons 'd-fexpr (cons args body)) env)
@@ -193,7 +193,7 @@
 
 (define l-fexpr-e
   (d-fexpr (args . body)
-    (let ((env (get-env-tail 1)))
+    (let ((env (current-env-tail 1)))
       (curry
         (lambdafy
           env
@@ -214,7 +214,7 @@
                     (begin (hash-table-set! ht var val) val)
                     (set!-env var val (cdr env)))))))
     
-    (set!-env var (eval-prev val) (get-env-tail 1))))
+    (set!-env var (eval-prev val) (current-env-tail 1))))
 
 (define counter
   (d-fun (n)
@@ -243,7 +243,7 @@
                     (eval-all (cdr c) env))
                 (cond-env (cdr clauses) env))))))
     
-    (cond-env clauses (get-env-tail 1))))
+    (cond-env clauses (current-env-tail 1))))
 
 (define flatten
   (d-fun (x)
@@ -274,7 +274,7 @@
               (eval-all (cdr c) env)
               (case-env key (cdr clauses) env))))))
     
-    (case-env (eval-prev key) clauses (get-env-tail 1))))
+    (case-env (eval-prev key) clauses (current-env-tail 1))))
 
 (define macro
   (d-fexpr (args . code)

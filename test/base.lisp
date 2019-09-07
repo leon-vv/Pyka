@@ -29,7 +29,7 @@
 (assert-equal
   (eval 
     `(quasiquote ,(cons 1 2))
-    (get-env))
+    (current-env))
   (cons 1 2))
 
 (assert-equal ((counter 5)) 5)

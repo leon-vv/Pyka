@@ -673,7 +673,7 @@ def new_global_env():
     'let': PC(let, False),
     'let*': PC(let_star, False),
     'call-with-current-continuation': PC(call_cc, True),
-    'get-env': PC(lambda env, args: env, True),
+    'current-env': PC(lambda env, args: env, True),
     'curry': PC(lambda env, args: CurriedCallable(args.car(), args.cdr()), True),
 
      

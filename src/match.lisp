@@ -186,7 +186,7 @@
 (def-d-fexpr match (expr . clauses)
   
     (let ((val (eval-prev expr))
-          (env (get-env-tail 1)))
+          (env (current-env-tail 1)))
 
       (with/cc return
         (do ((clauses clauses (cdr clauses)))

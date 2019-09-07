@@ -134,7 +134,7 @@
   (if (null? clauses) (do () (#f))) ; Infinite loop
     
   (let
-    ((base-env (get-env-tail 1))
+    ((base-env (current-env-tail 1))
 
      ; Will contain 'finish', 'leave', 'next', etc.
      ; But also any variable names used in reductions and accumulations
