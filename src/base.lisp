@@ -146,53 +146,17 @@
         list
         (member obj (cdr list))))))
 
-(if (member "--test" (command-line))
-  (define assert-equal
-    (d-fexpr (code res)
-      (let ((code-ev (eval-prev code))
-            (res-ev (eval-prev res)))
-        (if (equal? code-ev res-ev)
-            '()
-            (begin
-              (print "Failed test: " code " not equal to " res
-                    "\nFirst argument evaluated to: " code-ev
-                    "\nSecond argument evaluated to: " res-ev " \n"))))))
-  (define assert-equal (d-fexpr _)))
+(define assert-equal
+  (d-fexpr (code res)
+    (let ((code-ev (eval-prev code))
+          (res-ev (eval-prev res)))
+      (if (equal? code-ev res-ev)
+          '()
+          (begin
+            (print "Failed test: " code " not equal to " res
+                  "\nFirst argument evaluated to: " code-ev
+                  "\nSecond argument evaluated to: " res-ev " \n"))))))
  
-(assert-equal (append '() '() '()) '())
-(assert-equal (append) '())
-(assert-equal (append '() '(1 2 3) '() '(4 5)) '(1 2 3 4 5))
-
-(assert-equal (+ 1 2) 3)
-(assert-equal (last '(1 2 3)) 3)
-
-(assert-equal (last '(1)) 1)
-(assert-equal (begin 1 2 3) 3)
-
-(assert-equal (quote (1 2 3)) '(1 2 3))
-(assert-equal `(1 2 ,@(list 3 4)) (list 1 2 3 4))
-(assert-equal `(1 2 ,(+ 1 2)) (list 1 2 3))
-(assert-equal 
-  (let ((name 'x))
-    (quasiquote (let (((unquote name) 10)) (unquote name))))
-    '(let ((x 10)) x))
-(assert-equal
-  (let ((a 1) (b 2) (c 3))
-    `(,a ,b ,c))
-  '(1 2 3))
-(assert-equal
-  (let ((a 1) (b 2) (c 3))
-    `(a ,b `(,b ,,@x ,,(+ 1 ,,@y))))
-    '(a 2 (quasiquote
-            (2
-                (unquote-splicing x)
-                (unquote (+ 1 (unquote (unquote-splicing y))))))))
-(assert-equal
-    (eval 
-        `(quasiquote ,(cons 1 2))
-        (get-env))
-    (cons 1 2))
-
 (define lambdafy
   (d-fun (env fun wrapper)
     (curry
@@ -258,20 +222,6 @@
       (set! n (+ n 1))
       (- n 1))))
 
-(assert-equal ((counter 5)) 5)
-(assert-equal (let ((c (counter 0)))
-                (c)
-                (c)
-                (c)) 2)
-(assert-equal 
-  (let ((x 0))
-    (map (l-fun (v) 
-            (set! x (+ x 1))
-            x)
-         '(0 0 0)))
-    '(1 2 3))
-
-    
 (define eval-all
   (d-fun (es env)
     (eval `(begin ,@es) env)))
@@ -294,29 +244,6 @@
                 (cond-env (cdr clauses) env))))))
     
     (cond-env clauses (get-env-tail 1))))
-
-(assert-equal
-  (cond (#t 10)) 10)
-
-(assert-equal
-  (cond (#f) (else (+ 1 2))) 3)
-
-(assert-equal
-  (cond ((equal? 5 5) 10))
-  10)
-
-(assert-equal
-  (cond
-    ((and (equal? 5 5) (< 10 5)) 1)
-    ((or (equal? 5 5) (< 10 5)) 2))
-  2)
-
-(assert-equal
-  (begin
-    (let ((pat '(+ 1 1)))
-      (cond
-        ((and (list? pat) (not (null? pat))) (+ 10 10)))))
-  20)
 
 (define flatten
   (d-fun (x)
@@ -349,27 +276,12 @@
     
     (case-env (eval-prev key) clauses (get-env-tail 1))))
 
-(assert-equal
-  (case 10
-    ((10) 5)) 5)
-(assert-equal
-  (case 'abc
-    ((def abc) 15)) 15)
-(assert-equal
-  (case 'abc
-    ((abc) 5)
-    (else 30)) 5)
- 
 (define macro
   (d-fexpr (args . code)
     (eval-prev
       `(d-fexpr ,args
         (eval-prev (begin ,@code))))))
  
-(assert-equal
-    ((macro (x) x) (+ 1 1))
-    2)
-
 (define fun-shorthand
   (macro (sym-name fun)
     `(define ,sym-name
@@ -392,21 +304,9 @@
 (def-macro with/cc (name . code)
   `(call/cc (d-fun (,name) ,@code)))
 
-(assert-equal
-  (begin
-    (call/cc (d-fun (finish) (finish)))
-    10)
-  10)
-
-(assert-equal
-  (+ 2 (with/cc r (r 5)))
-  7)
-
  ; Let single
 (def-macro lets (name val . cmnds)
     `(let ((,name ,val)) ,@cmnds))
 
 (def-macro prepend-to (variable value)
   `(set! ,variable (cons ,value ,variable)))
-
-
