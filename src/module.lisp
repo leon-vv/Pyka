@@ -15,20 +15,19 @@
 ; - A list of the form (only ...)
 ; - A list of the form (except ...)
 
-(def-l-fun require (name import-spec)
+(def-l-fexpr require (name import-spec)
   (let ((path (string-append (symbol->string name) ".lisp"))
         (env (current-env-tail 1))
         (ht (make-hash-table))
         (export-spec #f))
     
     (def-d-fun copy-over (ht-source ht-dest idents)
-      (do ((i idents (cdr idents)))
+      (do ((i idents (cdr i)))
           ((null? i))
         (hash-table-set! ht-dest (car i) (hash-table-ref ht-source (car i)))))
-
     
     (hash-table-set! ht 'export
-      (l-fun (spec)
+      (l-fexpr (spec)
         (set! export-spec spec)))
         
     (eval `(load ,path) (cons ht env))
@@ -60,7 +59,7 @@
                         (hash-table-keys ht))))))
         ((list 'only idents ...)
           (match export-spec
-            ('all (copy-over ht (car env) idents))
+            ('all (copy-over ht (car env) (filter (d-fun (i) (member i idents)) idents)))
             ((list 'only ex-idents ...)
               (copy-over ht (car env)
                 (filter (d-fun (i) (or (member i idents) (member i ex-idents)))

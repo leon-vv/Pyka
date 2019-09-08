@@ -554,13 +554,16 @@ def list_tail(env, args):
         k -= 1
     return list
 
-def list_filter(pred, list):
-    if list == emptyList:
-        return emptyList
-    elif pred(env, Cons(list.car(), emptyList)):
-        return Cons(list.car(), list_filter(pred, list.cdr()))
-    else: 
-        return list_filter(pred, list.cdr())
+def list_filter(env, args):
+    pred = args.car()
+    list = args.cdr().car()
+    new_list = []
+
+    for x in list:
+        if pred.apply(env, Cons(x, emptyList)):
+            new_list.append(x)
+    
+    return Cons.from_iterator(new_list) 
 
 def list_member(obj, list):
     while list != emptyList:
@@ -729,7 +732,7 @@ def new_global_env():
     'reverse': PC(reverse, True),
     'append': PC(append, True),
     'list-tail': PC(list_tail, True),
-    'filter': fn(list_filter),
+    'filter': PC(list_filter, True),
     'member': fn(list_member),
 
     # Vector
