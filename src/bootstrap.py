@@ -573,6 +573,14 @@ def list_member(obj, list):
      
     return False
 
+def list_assoc(obj, list):
+    while list != emptyList:
+        if list.car().car() == obj:
+            return list.car()
+        list = list.cdr()
+     
+    return False
+            
 ### String
 
 def string_to_number(env, args):
@@ -734,6 +742,7 @@ def new_global_env():
     'list-tail': PC(list_tail, True),
     'filter': PC(list_filter, True),
     'member': fn(list_member),
+    'assoc': fn(list_assoc),
 
     # Vector
     'vector?': fn(lambda x: isinstance(x, list)),
