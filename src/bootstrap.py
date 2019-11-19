@@ -155,8 +155,6 @@ def params_args_to_dict(params, args, name):
             return dct
         elif isinstance(params, Cons):
             if args == emptyList:
-                printd(params)
-                printd(args)
                 raise ValueError('Not enough arguments supplied to SchemeCallable ' + name)
             dct[params.car().str] = args.car()
         else:
@@ -480,6 +478,16 @@ def load(env, args):
       env = args.cdr().car()
     read_execute_file(env, file_name)
      
+### Number
+
+def sub(*nums):
+    if len(nums) == 0:
+        raise ValueError('Function - expects at least one argument')
+    elif len(nums) == 1:
+        return -nums[0]
+    else:
+        return reduce(op.sub, nums[1:], nums[0])
+
 ### Boolean
 
 def and_(env, args):
@@ -695,7 +703,7 @@ def new_global_env():
     # Number
     'number?': fn(lambda n: isinstance(n, float)),
     '+': fn(lambda *args: reduce(op.add, args, 0)),
-    '-': fn(op.sub),
+    '-': fn(sub),
     '*': fn(lambda *args: reduce(op.mul, args, 1)),
     '>': fn(op.gt),
     '<': fn(op.lt),
@@ -734,6 +742,7 @@ def new_global_env():
     'cdr': fn(lambda x: x.cdr()),
     'null?': fn(lambda l: l == emptyList),
     'list': fn(lambda *elms: Cons.from_iterator(elms)),
+    'list*': fn(lambda *elms: Cons.from_iterator(elms, return_list=False)),
     'length': fn(lambda l: len(l)),
     'list->vector': fn(lambda l: list(l)),
     'map': PC(map_, True),
@@ -843,7 +852,7 @@ def print_eval_stack():
     global eval_stack
     
     if len(eval_stack) > 0:
-        for (env, expr) in [eval_stack[0]] + eval_stack[-5:]:
+        for (env, expr) in [eval_stack[0]] + eval_stack[-9:]:
             print('EVALUATING: \t', scheme_repr(expr))
             if hasattr(expr, 'line'):
                 print('PARSED AT: \t line ' + str(expr.line))
