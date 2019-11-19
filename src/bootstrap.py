@@ -85,12 +85,6 @@ class Cons(cabc.Sequence):
         
         return x
     
-    # Structure preserving map
-    # If 'self' is a pair, a pair will be returned
-    def map(self, fun):
-        return Cons.from_iterator(map(fun, self),
-                return_list=self.is_list)
-     
     def car(self):
         return self.tup[0]
     
@@ -531,11 +525,18 @@ def hash_table_walk(env, args):
 
 def map_(env, args):
     f = args.car()
-    lst = args.cdr().car()
-    if lst == emptyList: return emptyList
+    lsts = list(args.cdr())
     
-    return lst.map(lambda e: f.apply(env, Cons(e, emptyList)))
-
+    while True:
+        args = emptyList
+        for j in range(len(lsts)-1, -1, -1):
+            if lsts[j] == emptyList: return
+            
+            args = Cons(lsts[j].car(), args)
+            lsts[j] = lsts[j].cdr()
+       
+        yield f.apply(env, args)
+        
 def reverse(env, args):
     x = list(args.car())
     x.reverse()
@@ -745,7 +746,7 @@ def new_global_env():
     'list*': fn(lambda *elms: Cons.from_iterator(elms, return_list=False)),
     'length': fn(lambda l: len(l)),
     'list->vector': fn(lambda l: list(l)),
-    'map': PC(map_, True),
+    'map': PC(lambda *a: Cons.from_iterator(map_(*a)), True),
     'reverse': PC(reverse, True),
     'append': PC(append, True),
     'list-tail': PC(list_tail, True),

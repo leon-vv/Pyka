@@ -38,6 +38,14 @@
   '(1 2 3))
 
 (assert-equal
+  (map (d-fun (x) x) '())
+  '())
+
+(assert-equal
+  (map (d-fun (x y) (+ x y)) '(1 2 3) '(4 5 6))
+  '(5 7 9))
+
+(assert-equal
   (cond (#t 10)) 10)
 
 (assert-equal

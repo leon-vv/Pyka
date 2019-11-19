@@ -178,5 +178,15 @@
     (`(1 ,a 3) a))
   2)
 
+(assert-equal
+  (match '()
+    ('() 10))
+  10)
+
+(assert-equal
+  (match '()
+    ((list) 10))
+  10)
+
 
 
