@@ -325,3 +325,54 @@
 
 (def-macro prepend-to (variable value)
   `(set! ,variable (cons ,value ,variable)))
+
+(def-d-fun index (val lst)
+  (let ((t (member val lst)))
+    (assert t)
+    (- (length lst) (length t))))
+
+; Todo: do we want to support predicates?
+; Currently records are represented as vectors
+(def-macro define-record-type (name constructor pred . fields)
+  (list* 'begin
+    `(define ,(car constructor) ; Constructor function
+      (d-fun vals 
+        (assert (length vals) ,(length fields))
+        (list->vector vals)))
+    (map (d-fun (field)
+      (let ((name (car field))
+            (acc (cadr field))
+            (mod (cddr field)))
+          `(begin
+            (define ,acc ; Accessor functions
+              (d-fun (r)
+                (vector-ref r ,(index name (cdr constructor)))))
+            ,(if (not (null? mod)) ; Modifier functions
+              `(define ,(car mod)
+                (d-fun (r v)
+                  (vector-set! r ,(index name (cdr constructor)) v)))))))
+          fields)))
+          
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
