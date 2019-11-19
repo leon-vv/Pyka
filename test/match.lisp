@@ -19,6 +19,17 @@
       (hash-table-ref ht1 'def)))
   '((("abc") 1 2) (10)))
 
+(assert-equal
+  (match 'abc
+    ((? symbol? k) k))
+  'abc)
+
+(assert-equal
+  (match 10
+    ((? (curry > 5)) 'bigger)
+    ((? (curry <= 5)) 'smaller))
+  'smaller)
+
 ; These test cases are taken from 
 ; https://docs.racket-lang.org/reference/match.html
 
@@ -166,4 +177,6 @@
   (match '(1 2 3)
     (`(1 ,a 3) a))
   2)
+
+
 

@@ -141,11 +141,13 @@
      
     ((literal? pat)
       (match-literal val pat env))
-     
+
     ((and (list? pat) (not (null? pat)))
-      
-      (lets f (car pat)
-        (case f
+       
+      (if (equal? (car pat) '?)
+        (if ((eval (car (cdr pat)) (current-env)) val)
+          (match-pat val (cons 'and (cdr (cdr pat))) env))
+        (case (car pat)
           ((quote)
             (if (equal? (car (cdr pat)) val) '() #f))
           ((quasiquote)
@@ -159,29 +161,29 @@
           ((and)
             (do
                 ((p (cdr pat) (cdr p))
-                 (bind '()))
+                (bind '()))
                 ((or (null? p)
-                     (not bind)) bind)
+                    (not bind)) bind)
               (lets res (match-pat val (car p) env)
                 (set! bind (and res (append res bind)))
                 (set! env (and res (append res env))))))
           ((or)
             (do 
                 ((p (cdr pat) (cdr p))
-                 (bind #f))
+                (bind #f))
                 ((or (null? p)
-                     bind) bind)
+                    bind) bind)
               (set! bind (match-pat val (car p) env))))
           ((not)
             (do
               ((p (cdr pat) (cdr p))
-               (bind #f))
+              (bind #f))
               ((or (null? p)
-                   bind) (and (not bind) '()))
+                  bind) (and (not bind) '()))
               (set! bind (match-pat val (car p) env))))
-          (else (error "Unrecognized pattern")))))
-
-    (else (error "Unrecognized pattern"))))
+          (else (error "Unrecognized pattern " pat)))))
+    
+    (else (error "Unrecognized pattern " pat))))
 
 (def-d-fexpr match (expr . clauses)
   
@@ -195,6 +197,4 @@
           (lets res (match-pat val (car (car clauses)) '())
             (if res
               (return (eval-all (cdr (car clauses)) (append res env)))))))))
-
-
 
