@@ -231,12 +231,6 @@
     
     (set!-env var (eval-prev val) (current-env-tail 1))))
 
-(define counter
-  (d-fun (n)
-    (l-fun ()
-      (set! n (+ n 1))
-      (- n 1))))
-
 (define eval-all
   (d-fun (es env)
     (eval `(begin ,@es) env)))
@@ -323,7 +317,7 @@
 (def-macro lets (name val . cmnds)
     `(let ((,name ,val)) ,@cmnds))
 
-(def-macro prepend-to (variable value)
+(def-macro prepend-to! (variable value)
   `(set! ,variable (cons ,value ,variable)))
 
 (def-d-fun index (val lst)

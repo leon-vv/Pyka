@@ -32,11 +32,6 @@
     (current-env))
   (cons 1 2))
 
-(assert-equal ((counter 5)) 5)
-(assert-equal (let ((c (counter 0)))
-                (c)
-                (c)
-                (c)) 2)
 (assert-equal 
   (let ((x 0))
        (map (l-fun (v) (set! x (+ x 1)) x) '(0 0 0)))
