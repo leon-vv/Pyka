@@ -1,4 +1,19 @@
 
+; Two deep
+(define caar (d-fun (l) (car (car l))))
+(define cadr (d-fun (l) (car (cdr l))))
+(define cdar (d-fun (l) (cdr (car l))))
+(define cddr (d-fun (l) (cdr (cdr l))))
+; Three deep
+(define caaar (d-fun (l) (car (car (car l)))))
+(define caadr (d-fun (l) (car (car (cdr l)))))
+(define cadar (d-fun (l) (car (cdr (car l)))))
+(define caddr (d-fun (l) (car (cdr (cdr l)))))
+(define cdaar (d-fun (l) (cdr (car (car l)))))
+(define cdadr (d-fun (l) (cdr (car (cdr l)))))
+(define cddar (d-fun (l) (cdr (cdr (car l)))))
+(define cdddr (d-fun (l) (cdr (cdr (cdr l)))))
+
 (define print
   (d-fun msgs
 
