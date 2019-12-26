@@ -34,7 +34,7 @@ def is_truthy(val):
 
 def is_falsey(val):
     # According to RSR7 only #f is a false value
-    # First check fails for number 0
+    # val == False check fails for number 0
     return isinstance(val, bool) and val == False
 
 class Symbol:
@@ -66,7 +66,7 @@ class Cons(cabc.Sequence):
     def __init__(self, a, b, line=None):
         self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
         self.tup = (a, b)
-        if line != None: self.line = None
+        if line != None: self.line = line
 
     def from_iterator(it, return_list=True):
         x = emptyList

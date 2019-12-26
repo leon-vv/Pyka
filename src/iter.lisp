@@ -48,7 +48,7 @@
       
       (do ((a (cdr args) (cdr (cdr a)))) ; Turn args into hash table
           ((null? a))
-        (hash-table-set! args-ht (car a) (eval (car (cdr a)) (cons control-ht base-env))))
+        (hash-table-set! args-ht (car a) (eval (cadr a) (cons control-ht base-env))))
       
       (if (and (not already-called) (hash-table-exists? args-ht 'initial-value))
         (set! val (hash-table-ref args-ht 'initial-value)))

@@ -44,7 +44,7 @@
       (if (equal? val pat) '() #f))
     ((and (list? pat) (not (null? pat)))
       (if (equal? (car pat) 'unquote)
-        (match-pat val (car (cdr pat)) env)
+        (match-pat val (cadr pat) env)
         (match-list val pat env #f match-qp)))))
 
 ; Copy the bindings in source-env 
@@ -85,7 +85,7 @@
     ((or (null? val) (null? pats)) #f)
     ((and support-lvp
           (not (null? (cdr pats)))
-          (define r (parse-repeater (car (cdr pats)))))
+          (define r (parse-repeater (cadr pats))))
       (lets result (match-lvp val (car pats) env r matcher)
         (and result (lets other-bind (match-list (car result)
                                                (cdr (cdr pats))
@@ -109,7 +109,7 @@
     ((null? pats) #f) ; more val than pats remaining
     ((null? (cdr pats)) ; last pat
       (match-pat val (car pats) env))
-    ((define r (parse-repeater (car (cdr pats))))
+    ((define r (parse-repeater (cadr pats)))
        (lets result (match-lvp val (car pats) env r match-qp)
         (and result
              (match-list-rest (car result) (cdr (cdr pats)) (append (cdr result) env)))))
@@ -122,7 +122,7 @@
 (def-d-fun match-cons (val pat env)
   (lets res (match-pat (car val) (car pat) env)
     (and res
-      (lets other (match-pat (cdr val) (car (cdr pat)) (append res env))
+      (lets other (match-pat (cdr val) (cadr pat) (append res env))
         (and other (append res other))))))
 
 (def-d-fun match-literal (val pat env)
@@ -145,13 +145,13 @@
     ((and (list? pat) (not (null? pat)))
        
       (if (equal? (car pat) '?)
-        (if ((eval (car (cdr pat)) (current-env)) val)
+        (if ((eval (cadr pat) (current-env)) val)
           (match-pat val (cons 'and (cdr (cdr pat))) env))
         (case (car pat)
           ((quote)
-            (if (equal? (car (cdr pat)) val) '() #f))
+            (if (equal? (cadr pat) val) '() #f))
           ((quasiquote)
-            (match-qp val (car (cdr pat)) env))
+            (match-qp val (cadr pat) env))
           ((list)
             (if (list? val) (match-list val (cdr pat) env #t match-pat) #f))
           ((list-rest)
@@ -196,5 +196,5 @@
             
           (lets res (match-pat val (car (car clauses)) '())
             (if res
-              (return (eval-all (cdr (car clauses)) (append res env)))))))))
+              (return (eval-all (cdar clauses) (append res env)))))))))
 

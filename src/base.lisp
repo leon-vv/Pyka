@@ -88,9 +88,9 @@
         (if (not (pair? val))
           (any->string val)
           (if (equal? (car val) 'unquote)
-            (string-append "," (pretty-string (car (cdr val)) 0))
+            (string-append "," (pretty-string (cadr val) 0))
             (if (equal? (car val) 'unquote-splicing)
-              (string-append ",@" (pretty-string (car (cdr val)) (+ indent 1)))
+              (string-append ",@" (pretty-string (cadr val) (+ indent 1)))
               (pretty-list val indent))))))
 
     (at-indent indent (pretty-string-aux val indent))))
@@ -100,7 +100,7 @@
     (define expr
       (if (= (length args) 1)
           (car args)
-          (list '= (car args) (car (cdr args)))))
+          (list '= (car args) (cadr args))))
     (let ((res (eval-prev expr)))
       (if (not res)
         (error "======= ASSERTION FAILED ====== \n"
@@ -140,7 +140,7 @@
             (if (and (pair? first)
                      (not (null? first))
                      (equal? (car first) 'unquote-splicing))
-                (append (eval (car (cdr first)) env) rest)
+                (append (eval (cadr first) env) rest)
                 (cons (quasiquote-env first env) rest))))))
     
     (define quasiquote-env
@@ -148,7 +148,7 @@
         (if (not (pair? c))
           c
           (if (equal? (car c) 'unquote)
-              (eval (car (cdr c)) env)
+              (eval (cadr c) env)
               (quasiquote-cons-env c env)))))
       
     (quasiquote-env val (current-env-tail 1))))
