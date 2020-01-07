@@ -1,185 +1,159 @@
-(def-d-fexpr hash-table-set-symbol! (ht sym)
-  (hash-table-set! (eval-prev ht) sym (eval-prev sym)))
+
+(define-record-type iter-context
+  (iter-context iter-next-funs)
+  iter-context?
+  (auto-update iter-auto-update iter-auto-update!)
+  (next-funs iter-next-funs)
+  (finally iter-finally iter-finally!)
+  (initially iter-initially iter-initally!)
+  (after-each iter-after-each iter-after-each!)
+  (return-value iter-return-value iter-return-value!)
+  (repeat iter-repeat iter-repeat!)
+  (gathering-values iter-gathering-values iter-gathering-values!)
+  (first-iteration iter-first-iteration iter-first-iteration!)
+  (first-time iter-first-time iter-first-time!))
   
-; A 'generator' is a function that returns the next
-; value of a sequence at each invocation. When there
-; are no more values in the sequence to return, the
-; generator invokes the 'finish' function, which is
-; passed in as an argument.
-(def-d-fun make-list-gen (list)
-  (l-fun (finish)
-    (if (null? list)
-      (finish)
-      (lets val (car list)
-        (set! list (cdr list))
-        val))))
+(def-d-fun empty-iter-context ()
+  (lets ic (iter-context (make-hash-table))
+    (iter-auto-update! ic '())
+    (
 
-   
-(def-d-fun compute-step (keyword start . by)
-  (lets
-      direction
-      (case seq-kw
-        ((from upfrom) 1)
-        ((downfrom) -1))
-    (if (null? by)
-      direction
-      (* direction (car by)))))
+#|
+(def-d-fun list-gen (finish list)
+  (if (null? list)
+    (finish)
+    (return-first (car list) (set! list (cdr list)))))
 
-(def-d-fun compute-end (keyword end)
-  (case keyword
-    ((to) (+ end 1)) ; 'to' and 'downto' are inclusive
-    ((downto) (- end 1))
-    ((below above) end)))
+(def-d-fun flat-assoc-exists? (lst key)
+  (with/cc exit
+    (do ((l lst (cdr (cdr lst))))
+        ((or (null? l) (null? (cdr l))) #f)
+      (if (equal? (car l) key) (exit #t)))))
 
-(def-d-fun numer-gen (start end step)
-  (l-fun (finish)
-    (if (and end (or
-            (and (< step 0) (<= start end))
-            (and (> step 0) (>= start end))))
-      (finish)
-      (lets s start (set! start (+ start step)) s))))
-    
-(def-d-fun create-gathering (fun val control-ht base-env already-called set-return)
-  (l-fexpr args
-    (if (even (length args)) (error "Wrong number of arguments to gathering clause"))
-    
-    (let* ((args-ht (make-hash-table))
-           (expr-result (eval (car args) (cons control-ht base-env))))
+(def-d-un flat-assoc-ref (lst key)
+  (with/cc exit
+    (do ((l lst (cdr (cdr lst))))
+        (#f)
+      (if (equal? (car l) key) (exit (cadr l))))))
+
+; fun takes current state, new value, key list, env
+; and returns the new state
+(def-d-fexpr gathering (iter-context name default-initial fun v . keys)
+    (let* 
+        ((env (current-env-tail 1))
+        (v (eval v env))
+        (initial-val (if (flat-assoc-exists? keys 'initial-val)
+                         (flat-assoc-ref keys 'initial-val)
+                         default-initial)))
       
-      (do ((a (cdr args) (cdr (cdr a)))) ; Turn args into hash table
-          ((null? a))
-        (hash-table-set! args-ht (car a) (eval (cadr a) (cons control-ht base-env))))
-      
-      (if (and (not already-called) (hash-table-exists? args-ht 'initial-value))
-        (set! val (hash-table-ref args-ht 'initial-value)))
-      (set! already-called #t)
-      
-      (if (hash-table-exists? args-ht 'into) ; 'into' references value in control hash table
-        (let* ((var (hash-table-ref args-ht 'into))
-               (next-val (if (hash-table-exists? control-ht var)
-                              (fun (hash-table-ref control-ht var) expr-result args-ht)
-                              (fun val expr-result args-ht))))
-               (hash-table-set! control-ht var next-val)
-               next-val) ; make sure to return 'next-val'
-        (lets ret (set! val (fun val expr-result args-ht))
-          (set-return ret)
-          ret)))))
-            
+      (if (flat-assoc-exists? keys 'into)
+        (lets var (flat-assoc-ref keys 'into)
+          (env-define var (fun (if (env-exists? env var)
+                                   (eval var env)
+                                   initial-val) v keys env))
         
-(def-d-fun add-gatherings (control-ht base-env set-return)
-  (def-l-fun add (symbol fun init)
-    (hash-table-set! control-ht symbol (create-gathering fun init control-ht base-env #f set-return)))
-  
-  ; 'a' is current value, 'b' is the value passed as argument
-  ; 'k' is a hash table with Keyword arguments ('by', 'at', 'initial-value' etc)
-  (add 'sum (d-fun (a b k) (+ a b)) 0)
-  (add 'multiply (d-fun (a b k) (* a b)) 1)
-  (add 'counting (d-fun (a b k) (if b (+ a 1) a)) 0)
-  (add 'maximixe (d-fun (a b k) (if a (max a b) b)) #f)
-  (add 'minimize (d-fun (a b k) (if val (min a b) b)) #f)
-  (add 'reducing (d-fun (a b k) ((hash-table-ref 'by k) a b)) #f)
-  (add 'collect (d-fun (a b k)
-    (lets place (hash-table-ref/default k 'at 'end)
-      (case place
-        ((beginning start) (cons b a))
-        ((end) (append a (list b))))))
-    '())
-  (add 'appending (d-fun (a b k)
-    (lets place (hash-table-ref/default k 'at 'end)
-      (case place
-        ((beginning start) (append b a))
-        ((end) (append a b)))))
-    '()))
-
-(def-d-fun set-is-for  (clause is-for var)
-  (if (equal? (car (car clause)) 'for)
-    (hash-table-set! is-for var #t)))
-
-; Use of dynamic environment. Bindings of caller site
-; leak to this function.
-(def-d-fun match-clause ()
-  (match (car clauses)
-      (`(repeat ,times)
-        (if (equal? repeat #f)
-          (set! repeat times)
-          (set! repeat (min times repeat))))
-        
-      (`(,(or 'for 'generating) ,var in ,list)
-        (hash-table-set! gen-ht var (make-list-gen (eval list base-env)))
-        (set-is-for clauses is-for var))
+        (let* ((gv (iter-gathering-values iter-context))
+               (val (hash-table-ref/default gv name initial-val)))
+          (hash-table-set! gv name (+ (eval v env) val)))))))
       
-      ((list (or 'for 'generating) var seq-kw start)
-        (hash-table-set! gen-ht var (numer-gen start (compute-step seq-kw start) #f))
-        (set-is-for clauses is-for var))
-      
-      ((list (or 'for 'generating) var seq-kw start 'by by)
-        (hash-table-set! gen-ht var (numer-gen start (compute-step seq-kw start by) #f))
-        (set-is-for clauses is-for var))
 
-      ((list (or 'for 'generating) var seq-kw1 start seq-kw2 end)
-        (hash-table-set! gen-ht var
-          (numer-gen start (compute-step seq-kw start)
-                            (compute-end seq-kw2 end)))
-        (set-is-for clauses is-for var))
+(def-l-fexpr-env iter (env . forms)
+  (lets ((ht (make-hash-table))
+         (ic (lets ic iter-context 
+                '() '() (make-hash-table) '() '() #f #f (make-hash-table) #t)))
     
-      ((list-rest 'initially clauses)
-        (set! initially (append initially clauses)))
-      ((list-rest 'finally clauses)
-        (set! finally (append finally clauses)))
-      
-      (c (set! code (append code (list c))))))
-
-(def-d-fexpr iter clauses
- 
-  (if (null? clauses) (do () (#f))) ; Infinite loop
-    
-  (let
-    ((base-env (current-env-tail 1))
-
-     ; Will contain 'finish', 'leave', 'next', etc.
-     ; But also any variable names used in reductions and accumulations
-     (control-flow-ht (make-hash-table))      
-    
-     (initially '()) ; Code placement
-     (finally '())
-     (ret-val #f) ; Return value of iter
-     
-     (gen-ht (make-hash-table)) ; Generator hash table used by 'next' function
-     (is-for (make-hash-table)) ; Which of the generators is produced by a for statement
-      
-     (repeat #f) ; Wheter there is a bound on the loop repetitions
-     (code '())) ; User code (i.e. non driver code)
-     
-    (def-l-fun set-return (val) (set! ret-val val)) 
-
-    (do ((clauses clauses (cdr clauses)))
-        ((null? clauses) #f)
-      (match-clause)) 
-     
     (with/cc leave
       (with/cc finish-with
+        
+        (define finish (l-fun () (finish-with #f)))
       
-        (let* ((finish (l-fun () (finish-with #f)))
-               (set-return (l-fun (val) (set! ret-val val)))
-               (next (l-fun (sym) 
-                (hash-table-set! control-flow-ht sym ((hash-table-ref gen-ht sym) finish)))))
-          (hash-table-set-symbol! control-flow-ht leave)
-          (hash-table-set-symbol! control-flow-ht finish)
-          (hash-table-set-symbol! control-flow-ht next)
-          (add-gatherings control-flow-ht base-env set-return)
+        ; Drivers
+        (hash-table-set! ht 'next
+          (l-fexpr args
+            (if (null? args)
+                (if (and (iter-repeat ic) (equal? (iter-repeat ic) 1))
+                  (finish)
+                  (iter-repeat! ic (- (iter-repeat ic) 1)))
+                (hash-table-set! ht (car args) 
+                  ((hash-table-ref/default next-funs (car args)
+                    (l-fun () (error "While calling (next ...); variable "
+                                      (car args) " is not a valid driver"))))))))
+        
+        ; Todo: evaluated in correct env?
+        (def-d-fun set-driver (name args-to-generator)
+          (hash-table-set! ht name (l-fexpr args
+            (when (iter-first-iteration ic)
+              (lets var-and-gen (args-to-generator args)
+                (hash-table-set! next-funs
+                  (car var-and-gen)
+                  (curry (cadr var-and-gen) finish)))))))
+             
+        (set-driver 'for
+          (l-fun (var in list)
+            (cons
+              var
+              (make-list-gen (eval lst env)))))
+            
+        (def-d-fun set-gathering (name init fun)
+          (hash-table-set! ht name (curry gathering ic name init fun)))
+        
+        ; Reductions
+        (set-gathering 'sum 0 (d-fun (s v _ _) (+ s v)))
+        (set-gathering 'multiply 1 (d-fun (s v _ _) (* s v)))
+        (set-gathering 'counting 0 (d-fun (s v _ _) (if v (+ s 1) s)))
+        (set-gathering 'maximize #f (d-fun (s v _ _) (if s (max s v) v)))
+        (set-gathering 'minimize #f (d-fun (s v _ _) (if s (min s v) v)))
+        (set-gathering 'reducing #f (d-fun (s v k env) ((eval (flat-assoc-ref k 'by) env) s v)))
+        
+        ; Accumulations
+        (set-gathering 'collect '() (d-fun (s v k _)
+            (lets place (if (flat-assoc-exists? k 'at) (flat-assoc-ref k 'at) 'end)
+              (case place
+                ((beginning start) (cons v s))
+                ((end) (append a (list b)))))))
+        (set-gathering 'appending '() (d-fun (s v k _)
+            (lets place (if (flat-assoc-exists? k 'at) (flat-assoc-ref k 'at) 'end)
+              (case place
+                ((beggining start) (append s v))
+                ((end) (append v s))))))
+        
+        ; Aggregated boolean tests
+        (hash-table-set! ht 'always (l-fun (e) (if (not e) (leave #f)))) ; Todo: return value?
+        (hash-table-set! ht 'never (l-fun (e) (if e (leave #f))))
+        (hash-table-set! ht 'thereis (l-fun (e) (if e (leave e))))
+        
+        ; Control flow
+        (hash-table-set! ht 'finish finish)
+        (hash-table-set! ht 'leave (l-fun args (if (null? args) (leave #f) (leave (car args)))))
+        (hash-table-set! ht 'while (l-fun (e) (if (not e) (finish))))
+        (hash-table-set! ht 'until (l-fun (e) (if e (finish))))
+        
+        ; Code placement
+        (hash-table-set! ht 'initially (l-fexpr code (iter-initially! ic code)))
+        (hash-table-set! ht 'finally (l-fexpr code (iter-finally! ic code)))
+        (hash-table-set! ht 'after-each (l-fexpr code (iter-after-each! ic code)))
+
+        ; Predicates
+        (hash-table-set! ht 'first-iteration-p (l-fun () (iter-first-iteration ic)))
+        (hash-table-set! ht 'first-time-p
+          (l-fun () (return-first (iter-first-time ic) (iter-first-time! ic #f))))
+         
+        (do ((f forms (cdr forms)))
+            ((null? f))
+         
+          (with/cc next-iteration
+            (hash-table-set! ht 'next-iteration (l-fun () (next-iteration #f)))
+            (eval (car f) (cons ht env)))
           
-          (map next (hash-table-keys gen-ht)) ; Initialise variables
-          (eval-all initially (cons control-flow-ht base-env))
+          (iter-first-iteration! ic #f)
+
+          ; Update bindings created with for
+          (do ((u (iter-auto-update ic) (cdr u)))
+              ((null? u))
+            (eval `(next ,(car u)) (cons ht env)))
           
-          (do () (#f)
-          
-            (if (and repeat (< (set! repeat (- repeat 1)) 0)) (finish))
-            (map next (hash-table-keys is-for))
-
-            (eval-all code (cons control-flow-ht base-env)))))
-
-      (if (null? finally) ; Return implicit ret-val used by gatherings if there's no 'finally' block
-        ret-val
-        (eval-all finally (cons control-flow-ht base-env))))))
-
-
+          ; Update repeat counter
+          (if (iter-repeat ic) (eval '(next) (cons ht env))))
+      
+      (if (iter-finally ic) (eval (iter-finally ic)))))
+|# 
