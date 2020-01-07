@@ -330,6 +330,8 @@
 (def-macro prepend-to! (variable value)
   `(set! ,variable (cons ,value ,variable)))
 
+(def-d-fun force-eval-args (fun . args)
+  (apply fun args))
 (def-d-fun index (val lst)
   (let ((t (member val lst)))
     (assert t)
