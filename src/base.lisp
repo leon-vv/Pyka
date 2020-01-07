@@ -317,6 +317,16 @@
 (def-macro lets (name val . cmnds)
     `(let ((,name ,val)) ,@cmnds))
 
+(def-macro when (test . code)
+  `(if ,test
+    (begin ,@code)))
+
+(def-d-fun return-first (a b) a)
+
+(def-macro unless (test . code)
+  `(if (not ,test)
+    (begin ,@code)))
+
 (def-macro prepend-to! (variable value)
   `(set! ,variable (cons ,value ,variable)))
 
@@ -348,8 +358,6 @@
           fields)))
           
       
-
-
 
 
 

@@ -669,6 +669,9 @@ def env_ref(env, sym):
         env = env.cdr()
     return None
         
+def env_define(env1, env2, var, val):
+    env2.car()[var] = val
+    
 def env_exists(env, k):
     return env_ref(env, k) != None
 
@@ -809,6 +812,7 @@ def new_global_env():
     'env-keys': fn(env_keys),
     'env-values': fn(env_values),
     'env-ref': fn(env_ref),
+    'env-define': fn(env_define),
     'env-exists?': fn(env_exists),
     
     # Misc
