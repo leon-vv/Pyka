@@ -1,24 +1,31 @@
 
-(define-record-type iter-context
-  (iter-context iter-next-funs)
-  iter-context?
-  (auto-update iter-auto-update iter-auto-update!)
-  (next-funs iter-next-funs)
-  (finally iter-finally iter-finally!)
-  (initially iter-initially iter-initally!)
-  (after-each iter-after-each iter-after-each!)
-  (return-value iter-return-value iter-return-value!)
-  (repeat iter-repeat iter-repeat!)
-  (gathering-values iter-gathering-values iter-gathering-values!)
-  (first-iteration iter-first-iteration iter-first-iteration!)
-  (first-time iter-first-time iter-first-time!))
-  
 (def-d-fun empty-iter-context ()
-  (lets ic (iter-context (make-hash-table))
-    (iter-auto-update! ic '())
-    (
+  (define auto-update '())
+  (define next-funs (make-hash-table))
+  (define finally #f)
+  (define after-each #f)
+  (define return-value #f)
+  (define repeat #f)
+  (define gathering-values (make-hash-table))
+  (define first-iteration #t)
+  (define first-time #t)
+  ; Control flow Hash Table, used to store references 
+  ; to 'for', 'collect', 'next', etc. and in which scope
+  ; the iter statements are evaluated.
+  (define ht (make-hash-table))
+  
+  (def-l-fexpr next args
+    (if (null? args)
+      (if (and repeat (equal? repeat 1))
+          (finish)
+          (set! repeat (- repeat 1)))
+      (hash-table-set! ht (car args)
+        ((hash-table-ref/default next-funs (car args)
+          (l-fun () (error "While calling (next ...); variable "
+                            (car args) " is not a valid driver")))))))
 
-#|
+  (car (current-env)))
+
 (def-d-fun list-gen (finish list)
   (if (null? list)
     (finish)
@@ -52,37 +59,24 @@
                                    (eval var env)
                                    initial-val) v keys env))
         
-        (let* ((gv (iter-gathering-values iter-context))
+        (let* ((gv (hash-table-ref ic 'gathering-values))
                (val (hash-table-ref/default gv name initial-val)))
           (hash-table-set! gv name (+ (eval v env) val)))))))
       
-
 (def-l-fexpr-env iter (env . forms)
-  (lets ((ht (make-hash-table))
-         (ic (lets ic iter-context 
-                '() '() (make-hash-table) '() '() #f #f (make-hash-table) #t)))
-    
+  (let (empty-iter-context)
     (with/cc leave
       (with/cc finish-with
         
         (define finish (l-fun () (finish-with #f)))
       
         ; Drivers
-        (hash-table-set! ht 'next
-          (l-fexpr args
-            (if (null? args)
-                (if (and (iter-repeat ic) (equal? (iter-repeat ic) 1))
-                  (finish)
-                  (iter-repeat! ic (- (iter-repeat ic) 1)))
-                (hash-table-set! ht (car args) 
-                  ((hash-table-ref/default next-funs (car args)
-                    (l-fun () (error "While calling (next ...); variable "
-                                      (car args) " is not a valid driver"))))))))
+        (hash-table-set! ht 'next (curry next (car (current-env))))
         
         ; Todo: evaluated in correct env?
         (def-d-fun set-driver (name args-to-generator)
           (hash-table-set! ht name (l-fexpr args
-            (when (iter-first-iteration ic)
+            (when first-iteration
               (lets var-and-gen (args-to-generator args)
                 (hash-table-set! next-funs
                   (car var-and-gen)
@@ -129,14 +123,18 @@
         (hash-table-set! ht 'until (l-fun (e) (if e (finish))))
         
         ; Code placement
-        (hash-table-set! ht 'initially (l-fexpr code (iter-initially! ic code)))
-        (hash-table-set! ht 'finally (l-fexpr code (iter-finally! ic code)))
-        (hash-table-set! ht 'after-each (l-fexpr code (iter-after-each! ic code)))
-
+        (hash-table-set! ht 'initially (l-fexpr-env (env . code)
+          (when first-iteration
+            (eval code env)))) ; Todo: not completely standards compliant?
+         
+        (hash-table-set! ht 'finally
+          (l-fexpr-env (env . code) (set! finally (l-fun () (eval code env)))))
+        (hash-table-set! ht 'after-each (l-fexpr code (set! after-each code)))
+        
         ; Predicates
-        (hash-table-set! ht 'first-iteration-p (l-fun () (iter-first-iteration ic)))
+        (hash-table-set! ht 'first-iteration-p (l-fun () first-iteration))
         (hash-table-set! ht 'first-time-p
-          (l-fun () (return-first (iter-first-time ic) (iter-first-time! ic #f))))
+          (l-fun () (return-first first-time (set! first-time #f))))
          
         (do ((f forms (cdr forms)))
             ((null? f))
@@ -144,16 +142,16 @@
           (with/cc next-iteration
             (hash-table-set! ht 'next-iteration (l-fun () (next-iteration #f)))
             (eval (car f) (cons ht env)))
+           
+          (set! first-iteration #f)
           
-          (iter-first-iteration! ic #f)
-
           ; Update bindings created with for
-          (do ((u (iter-auto-update ic) (cdr u)))
+          (do ((u auto-update (cdr u)))
               ((null? u))
-            (eval `(next ,(car u)) (cons ht env)))
-          
+            (force-eval-args next (car u)))
+           
           ; Update repeat counter
-          (if (iter-repeat ic) (eval '(next) (cons ht env))))
+          (next)))
       
-      (if (iter-finally ic) (eval (iter-finally ic)))))
-|# 
+      (if finally (finally)))))
+
