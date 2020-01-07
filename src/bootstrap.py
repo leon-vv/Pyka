@@ -417,10 +417,13 @@ def do(env, args):
     return reduce(lambda _, e: eval(Cons(dct, env), e), test.cdr(), False)
 
 def let(env, args):
-    dict = {}
-    
-    for (symbol, expr) in args.car():
-        dict[symbol.str] = eval(env, expr)
+
+    if isinstance(args.car(), Cons):
+        dict = {}
+        for (symbol, expr) in args.car():
+            dict[symbol.str] = eval(env, expr)
+    else:
+        dict = args.car()
      
     return eval_all_ret_last(Cons(dict, env), args.cdr())
 
