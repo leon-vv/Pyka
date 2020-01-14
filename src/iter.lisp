@@ -67,15 +67,19 @@
         
         (def-l-fexpr next args
           (if (null? args)
-            (if (and repeat (equal? repeat 1))
-                (finish)
-                (set! repeat (- repeat 1)))
+            (begin
+              (assert (number? repeat))
+              (if (equal? repeat 1) (finish) (set! repeat (- repeat 1))))
             (hash-table-set! ht (car args)
               ((hash-table-ref/default next-funs (car args)
                 (l-fun () (error "While calling (next ...); variable "
                                   (car args) " is not a valid driver")))))))
          
         (hash-table-set! ht 'next next)
+
+        (hash-table-set! ht 'repeat
+          (l-fun (count)
+            (when first-iteration (set! repeat count))))
          
         (hash-table-set! ht 'for
           (l-fexpr-e (inner-env var in lst)
@@ -123,10 +127,10 @@
         ; Code placement
         (hash-table-set! ht 'initially (l-fexpr-e (env . code)
           (when first-iteration
-            (eval code env)))) ; Todo: this is not standards compliant?
+            (eval-all code env)))) ; Todo: this is not standards compliant?
          
         (hash-table-set! ht 'finally ; Todo: support multiple finally blocks
-          (l-fexpr-e (env . code) (set! finally (l-fun () (eval code env)))))
+          (l-fexpr-e (env . code) (set! finally (l-fun () (eval-all code env)))))
         (hash-table-set! ht 'after-each
           (l-fexpr-e (env . code) (set! after-each (l-fun () (eval code env)))))
         
@@ -135,21 +139,22 @@
         (hash-table-set! ht 'first-time-p
           (l-fun () (return-first first-time (set! first-time #f))))
          
-        (do ((f forms (cdr forms)))
-            ((null? f))
+        (do () (#f)
         
-          (with/cc next-iteration
-            (hash-table-set! ht 'next-iteration (l-fun () (next-iteration #f)))
-            (eval (car f) (cons ht env)))
-           
+          (do ((f forms (cdr f)))
+              ((null? f))
+            (with/cc next-iteration
+              (hash-table-set! ht 'next-iteration (l-fun () (next-iteration #f)))
+              (eval (car f) (cons ht env))))
+            
           (set! first-iteration #f)
           
           ; Update bindings created with for
           (do ((u auto-update (cdr u)))
               ((null? u))
             (force-eval-args next (car u)))
-           
+            
           ; Update repeat counter
-          (next)))
+          (if repeat (next))))
       
       (if finally (finally)))))
