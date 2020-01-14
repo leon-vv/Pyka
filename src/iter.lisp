@@ -14,16 +14,6 @@
   ; the iter statements are evaluated.
   (define ht (make-hash-table))
   
-  (def-l-fexpr next args
-    (if (null? args)
-      (if (and repeat (equal? repeat 1))
-          (finish)
-          (set! repeat (- repeat 1)))
-      (hash-table-set! ht (car args)
-        ((hash-table-ref/default next-funs (car args)
-          (l-fun () (error "While calling (next ...); variable "
-                            (car args) " is not a valid driver")))))))
-
   (car (current-env)))
 
 (def-d-fun list-gen (finish list)
@@ -48,49 +38,56 @@
 ; and returns the new state
 (def-d-fexpr gathering (iter-context name default-initial fun v . keys)
     (let* 
-        ((env (current-env-tail 1))
+        ((env (current-env-tail 2)) ; Todo: should this be considered idomatic?
         (v (eval v env))
         (initial-val (if (flat-assoc-exists? keys 'initial-val)
                          (flat-assoc-ref keys 'initial-val)
                          default-initial)))
       
       (if (flat-assoc-exists? keys 'into)
+      
         (lets var (flat-assoc-ref keys 'into)
           (env-define var (fun (if (env-exists? env var)
-                                   (eval var env)
-                                   initial-val) v keys env))
+                                   (env-ref env var)
+                                   initial-val) v keys env)))
         
-        (let* ((gv (hash-table-ref ic 'gathering-values))
+        ; Todo: return value?
+        (let* ((gv (hash-table-ref iter-context 'gathering-values))
                (val (hash-table-ref/default gv name initial-val)))
-          (hash-table-set! gv name (+ (eval v env) val)))))))
+          (hash-table-set! gv name (fun val v keys env))))))
       
-(def-l-fexpr-env iter (env . forms)
-  (let (empty-iter-context)
+(def-l-fexpr-e iter (env . forms)
+  (let-ht (empty-iter-context)
     (with/cc leave
       (with/cc finish-with
         
         (define finish (l-fun () (finish-with #f)))
       
         ; Drivers
-        (hash-table-set! ht 'next (curry next (car (current-env))))
         
-        ; Todo: evaluated in correct env?
-        (def-d-fun set-driver (name args-to-generator)
-          (hash-table-set! ht name (l-fexpr args
+        (def-l-fexpr next args
+          (if (null? args)
+            (if (and repeat (equal? repeat 1))
+                (finish)
+                (set! repeat (- repeat 1)))
+            (hash-table-set! ht (car args)
+              ((hash-table-ref/default next-funs (car args)
+                (l-fun () (error "While calling (next ...); variable "
+                                  (car args) " is not a valid driver")))))))
+         
+        (hash-table-set! ht 'next next)
+         
+        (hash-table-set! ht 'for
+          (l-fexpr-e (inner-env var in lst)
             (when first-iteration
-              (lets var-and-gen (args-to-generator args)
-                (hash-table-set! next-funs
-                  (car var-and-gen)
-                  (curry (cadr var-and-gen) finish)))))))
-             
-        (set-driver 'for
-          (l-fun (var in list)
-            (cons
-              var
-              (make-list-gen (eval lst env)))))
-            
+              (lets gen (list-gen finish (eval lst inner-env))
+                (env-define env var (gen))
+                (set! auto-update (cons var auto-update))
+                (hash-table-set! next-funs var gen)))))
+         
+        ; Gatherings
         (def-d-fun set-gathering (name init fun)
-          (hash-table-set! ht name (curry gathering ic name init fun)))
+          (hash-table-set! ht name (curry gathering (car (current-env)) name init fun)))
         
         ; Reductions
         (set-gathering 'sum 0 (d-fun (s v _ _) (+ s v)))
@@ -124,13 +121,14 @@
         (hash-table-set! ht 'until (l-fun (e) (if e (finish))))
         
         ; Code placement
-        (hash-table-set! ht 'initially (l-fexpr-env (env . code)
+        (hash-table-set! ht 'initially (l-fexpr-e (env . code)
           (when first-iteration
-            (eval code env)))) ; Todo: not completely standards compliant?
+            (eval code env)))) ; Todo: this is not standards compliant?
          
-        (hash-table-set! ht 'finally
-          (l-fexpr-env (env . code) (set! finally (l-fun () (eval code env)))))
-        (hash-table-set! ht 'after-each (l-fexpr code (set! after-each code)))
+        (hash-table-set! ht 'finally ; Todo: support multiple finally blocks
+          (l-fexpr-e (env . code) (set! finally (l-fun () (eval code env)))))
+        (hash-table-set! ht 'after-each
+          (l-fexpr-e (env . code) (set! after-each (l-fun () (eval code env)))))
         
         ; Predicates
         (hash-table-set! ht 'first-iteration-p (l-fun () first-iteration))
@@ -139,7 +137,7 @@
          
         (do ((f forms (cdr forms)))
             ((null? f))
-         
+        
           (with/cc next-iteration
             (hash-table-set! ht 'next-iteration (l-fun () (next-iteration #f)))
             (eval (car f) (cons ht env)))
@@ -155,4 +153,3 @@
           (next)))
       
       (if finally (finally)))))
-
