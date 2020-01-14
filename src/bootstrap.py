@@ -16,7 +16,9 @@ from functools import reduce
 from parsec import *
 
 # Todo: look into converting Python tail calls to
-# iterations
+# iterations. This might get fixed once heap
+# allocated stack frames are used, which are needed
+# for first class continuations.
 sys.setrecursionlimit(2500)
 
 ################### Global variables
@@ -368,13 +370,9 @@ def printd(val):
 ### Control flow primitives
 def define(env, args):
     val = eval(env, args.cdr().car())
-    name = args.car().str
+    sym = args.car()
     
-    if isinstance(val, SchemeCallable) \
-            or isinstance(val, PythonCallable):
-        val.name = name # Better stack trace
-     
-    env.car()[name] = val
+    env_define(env, sym, val)
     return val
 
 def undefine(env, args):
@@ -416,14 +414,14 @@ def do(env, args):
     
     return reduce(lambda _, e: eval(Cons(dct, env), e), test.cdr(), False)
 
+def let_ht(env, args):
+    return eval_all_ret_last(Cons(eval(env, args.car()), env), args.cdr())
+
 def let(env, args):
 
-    if isinstance(args.car(), Cons):
-        dict = {}
-        for (symbol, expr) in args.car():
-            dict[symbol.str] = eval(env, expr)
-    else:
-        dict = args.car()
+    dict = {}
+    for (symbol, expr) in args.car():
+        dict[symbol.str] = eval(env, expr)
      
     return eval_all_ret_last(Cons(dict, env), args.cdr())
 
@@ -672,9 +670,15 @@ def env_ref(env, sym):
         env = env.cdr()
     return None
         
-def env_define(env1, env2, var, val):
-    env2.car()[var] = val
-    
+def env_define(env, symbol, value):
+        
+    if isinstance(value, SchemeCallable) \
+            or isinstance(value, PythonCallable):
+        value.name = symbol.str # Better stack trace
+     
+    env.car()[symbol.str] = value
+    return value
+ 
 def env_exists(env, k):
     return env_ref(env, k) != None
 
@@ -696,6 +700,7 @@ def new_global_env():
     'equal?': fn(op.eq),
     'exit': fn(exit),
     'do': PC(do, False),
+    'let-ht': PC(let_ht, False),
     'let': PC(let, False),
     'let*': PC(let_star, False),
     'call-with-current-continuation': PC(call_cc, True),
