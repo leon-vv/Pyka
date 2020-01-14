@@ -33,13 +33,13 @@
 
 (def-d-fun flat-assoc-exists? (lst key)
   (with/cc exit
-    (do ((l lst (cdr (cdr lst))))
+    (do ((l lst (cdr (cdr l))))
         ((or (null? l) (null? (cdr l))) #f)
       (if (equal? (car l) key) (exit #t)))))
 
-(def-d-un flat-assoc-ref (lst key)
+(def-d-fun flat-assoc-ref (lst key)
   (with/cc exit
-    (do ((l lst (cdr (cdr lst))))
+    (do ((l lst (cdr (cdr l))))
         (#f)
       (if (equal? (car l) key) (exit (cadr l))))))
 
