@@ -172,49 +172,41 @@
                   "\nFirst argument evaluated to: " code-ev
                   "\nSecond argument evaluated to: " res-ev " \n"))))))
  
-(define lambdafy
-  (d-fun (env fun wrapper)
-    (curry
-      (wrapper (env fun . args)
-        (eval `(apply ,fun ',args) env))
-      env fun)))
-
 (define l-fun
   (d-fexpr (args . code)
     (let ((env (current-env-tail 1)))
-      (lambdafy
+      (curry
+        (d-fun (env fun . args)
+          (eval `(apply ,fun ',args) env))
         env
-        (eval (cons 'd-fun (cons args code))
-              env)
-        d-fun))))
+        (eval (list* 'd-fun args code) env)))))
 
 (define l-fun-e
   (d-fexpr (args . code)
     (let ((env (current-env-tail 1)))
       (curry
-        (lambdafy
-          env
-          (eval (cons 'd-fun (cons args code)) env)
-          d-fun)
-        env))))
+        (d-fun (env fun . args)
+          (eval `(apply ,fun ',(cons (current-env-tail 1) args)) env))
+        env
+        (eval (list* 'd-fun args code) env)))))
 
 (define l-fexpr
-  (d-fexpr (args . body)
-    (let ((env (current-env-tail 1)))
-      (lambdafy
-        env
-        (eval (cons 'd-fexpr (cons args body)) env)
-        d-fexpr))))
-
-(define l-fexpr-e
-  (d-fexpr (args . body)
+  (d-fexpr (args . code)
     (let ((env (current-env-tail 1)))
       (curry
-        (lambdafy
-          env
-          (eval (cons 'd-fexpr (cons args body)) env)
-          d-fexpr)
-        env))))
+        (d-fexpr (env fun . args)
+          (eval `(apply ,fun ',args) env))
+        env
+        (eval (list* 'd-fun args code) env)))))
+
+(define l-fexpr-e
+  (d-fexpr (args . code)
+    (let ((env (current-env-tail 1)))
+      (curry
+        (d-fexpr (env fun . args)
+          (eval `(apply ,fun ',(cons (current-env-tail 1) args)) env))
+        env
+        (eval (list* 'd-fun args code) env)))))
 
 (define set!
   (d-fexpr (var val)
