@@ -27,9 +27,10 @@
   (car (current-env)))
 
 (def-d-fun list-gen (finish list)
-  (if (null? list)
-    (finish)
-    (return-first (car list) (set! list (cdr list)))))
+  (l-fun ()
+    (if (null? list)
+      (finish)
+      (return-first (car list) (set! list (cdr list))))))
 
 (def-d-fun flat-assoc-exists? (lst key)
   (with/cc exit
