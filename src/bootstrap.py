@@ -590,6 +590,11 @@ def list_assoc(obj, list):
      
     return False
             
+def list_ref(list, n):
+    if not (0 <= n < len(list)):
+        raise ValueError('list_ref called with index outside list length')
+    
+    return list[int(n)]
 ### String
 
 def string_to_number(env, args):
@@ -756,6 +761,7 @@ def new_global_env():
     'filter': PC(list_filter, True),
     'member': fn(list_member),
     'assoc': fn(list_assoc),
+    'list-ref': fn(list_ref),
 
     # Vector
     'vector?': fn(lambda x: isinstance(x, list)),
