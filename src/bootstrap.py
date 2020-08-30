@@ -206,8 +206,11 @@ def scheme_repr(val):
     
     if ii(val, bool):
         return "#t" if val else "#f"
-    elif ii(val, float) or ii(val, int):
-        return str(val)
+    elif ii(val, float):
+        if val.is_integer():
+            return str(int(val))
+        else:
+            return str(val)
     elif ii(val, list):
         inner = map(scheme_repr, val)
         return "#(" + " ".join(inner) + ")"
