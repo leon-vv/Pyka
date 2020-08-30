@@ -216,21 +216,6 @@
           d-fexpr)
         env))))
 
-(define set!
-  (d-fexpr (var val)
-     
-    (define set!-env
-      (d-fun (var val env)
-          (if (null? env)
-              (error "set! cannot find " var " in environment ")
-              
-              (let ((ht (car env)))
-                (if (hash-table-exists? ht var)
-                    (begin (hash-table-set! ht var val) val)
-                    (set!-env var val (cdr env)))))))
-    
-    (set!-env var (eval-prev val) (current-env-tail 1))))
-
 (define eval-all
   (d-fun (es env)
     (eval `(begin ,@es) env)))

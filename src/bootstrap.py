@@ -13,7 +13,9 @@ import collections.abc as cabc
 
 from itertools import chain
 from functools import reduce
-from parsec import *
+from parsec import * # type: ignore
+
+from typing import *
 
 # Todo: look into converting Python tail calls to
 # iterations
@@ -592,12 +594,14 @@ def list_assoc(obj, list):
         list = list.cdr()
      
     return False
-            
+
 def list_ref(list, n):
     if not (0 <= n < len(list)):
         raise ValueError('list_ref called with index outside list length')
     
     return list[int(n)]
+
+
 ### String
 
 def string_to_number(env, args):
@@ -677,8 +681,26 @@ def env_ref(env, sym):
         env = env.cdr()
     return None
         
-def env_define(env1, env2, var, val):
-    env2.car()[var] = val
+def env_define(env2, var, val):
+    env2.car()[var.str] = val
+
+def env_set(env, var, val):
+     
+    while env != emptyList:
+        ht = env.car()
+
+        if var.str in ht:
+            ht[var.str] = val
+            return val
+        
+        env = env.cdr()
+    
+    raise ValueError('Cannot set! ', var, ' to ', val, ' in empty environment')
+
+def set(env, args):
+    return env_set(env, args.car(), eval(env, args[1]))
+
+    
     
 def env_exists(env, k):
     return env_ref(env, k) != None
@@ -696,6 +718,7 @@ def new_global_env():
     'd-fexpr': PC(lambda env, args: SC(args.car(), args.cdr(), 'd-fexpr'), False),
     'd-fun': PC(lambda env, args: SC(args.car(), args.cdr(), 'd-fun'), False),
     'define': PC(define, False),
+    'set!': PC(set, False),
     'undefine': PC(undefine, False),
     'if': PC(if_, False),
     'equal?': fn(op.eq),
@@ -821,7 +844,8 @@ def new_global_env():
     'env-keys': fn(env_keys),
     'env-values': fn(env_values),
     'env-ref': fn(env_ref),
-    'env-define': fn(env_define),
+    'env-define!': fn(env_define),
+    'env-set!': fn(env_set),
     'env-exists?': fn(env_exists),
     
     # Misc
@@ -866,7 +890,7 @@ def print_eval_stack():
     global eval_stack
     
     if len(eval_stack) > 0:
-        for (env, expr) in [eval_stack[0]] + eval_stack[-9:]:
+        for (env, expr) in [eval_stack[0]] + eval_stack[-2:]:
             print('EVALUATING: \t', scheme_repr(expr))
             if hasattr(expr, 'line'):
                 print('PARSED AT: \t line ' + str(expr.line))
