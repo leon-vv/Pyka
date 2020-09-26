@@ -42,13 +42,19 @@ def is_falsey(val):
 class Symbol:
     def __init__(self, s, line=None):
         self.str = s
-        if line != None: self.line = line
-    
+        self.line = line
+     
     def __eq__(self, other):
         if(isinstance(other, Symbol)):
             return self.str == other.str
         else:
             return False
+
+    def __repr__(self):
+        if self.line != None:
+            return 'Symbol({}, {})'.format(repr(self.str), repr(self.line))
+        else:
+            return 'Symbol({})'.format(repr(self.str))
     
     def scheme_repr(self):
         return self.str
@@ -61,6 +67,7 @@ class EmptyList:
     def __iter__(self):
         return iter(())
 
+
 emptyList = EmptyList()
 
 class Cons(cabc.Sequence):
@@ -68,8 +75,14 @@ class Cons(cabc.Sequence):
     def __init__(self, a, b, line=None):
         self.is_list = (isinstance(b, Cons) and b.is_list) or b == emptyList
         self.tup = (a, b)
-        if line != None: self.line = line
-
+        self.line = line
+    
+    def __repr__(self):
+        if self.is_list:
+            return '(list ' + ' '.join(repr(x) for x in self) + ')'
+        else:
+            return 'Cons({}, {})'.format(repr(self.tup[0]), repr(self.tup[1]))
+    
     def from_iterator(it, return_list=True):
         x = emptyList
         l = list(it)
@@ -280,13 +293,13 @@ def normal_identifier():
     return init + ''.join(sub)
 
 # See standard RSR7 chapter 7.
-# This is the second row of 'peculiar indetifier'
+# This is the second row of 'peculiar identifier'
 @generate
 def peculiar_identifier():
     sign = yield one_of('+-')
     sub = yield sign_subsequent
     sub_rest = yield many(sign_subsequent)
-
+     
     return sign + sub + ''.join(sub_rest)
 
 dot_subsequent = sign_subsequent | string('.')
@@ -300,10 +313,11 @@ def peculiar_identifier_dot():
 
 @generate
 def symbol():
-    s = yield mark((one_of('+-') ^
+    s = yield mark(
         normal_identifier ^
         peculiar_identifier ^
-        peculiar_identifier_dot))
+        peculiar_identifier_dot ^
+        one_of('+-'))
     return Symbol(s[1], s[0][0] + 1)
 
 escaped_or_char = escaped_char ^ none_of('"')
@@ -733,7 +747,8 @@ def new_global_env():
      
     'apply': PC(lambda env, args: args.car().apply(env, args[1]), True),
     'load': PC(load, True),
-    'procedure?': fn(lambda p: isinstance(p, PC) or isinstance(p, SC)),
+    'procedure?': fn(lambda p: isinstance(p, PC) or isinstance(p, SC) or \
+        isinstance(p, CurriedCallable)),
     
     # Number
     'number?': fn(lambda n: isinstance(n, float)),
