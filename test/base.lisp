@@ -32,6 +32,14 @@
     (current-env))
   (cons 1 2))
 
+(assert-equal
+  (string-join-map ", " number->string '(1 2 3))
+  "1, 2, 3")
+
+(assert-equal
+  (string-join-map "" (d-fun (x) x) '("a" "b"))
+  "ab")
+
 (assert-equal 
   (let ((x 0))
        (map (l-fun (v) (set! x (+ x 1)) x) '(0 0 0)))

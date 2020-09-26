@@ -216,16 +216,19 @@ class CurriedCallable:
     def scheme_repr(self):
         return "{%s curried %d}" % (self.callable.scheme_repr(), len(self.curried_args)) 
 
+def number_to_string(num):
+    if num.is_integer():
+        return str(int(num))
+    else:
+        return str(num)
+
 def scheme_repr(val):
     ii = isinstance
     
     if ii(val, bool):
         return "#t" if val else "#f"
     elif ii(val, float):
-        if val.is_integer():
-            return str(int(val))
-        else:
-            return str(val)
+        return number_to_string(val)
     elif ii(val, list):
         inner = map(scheme_repr, val)
         return "#(" + " ".join(inner) + ")"
@@ -764,7 +767,8 @@ def new_global_env():
     'max': fn(max),
     'even': fn(lambda n: n % 2 == 0),
     'odd': fn(lambda n: n % 2 == 1),
-    
+    'number->string': fn(number_to_string),
+     
     # Boolean
     'not': fn(lambda b: b == False),
     'boolean?': fn(lambda b: isinstance(b, bool)),

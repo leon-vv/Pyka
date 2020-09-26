@@ -232,7 +232,7 @@
         (if (null? clauses)
           #f
           (let* ((c (car clauses))
-                (res (if (equal? c 'else)
+                (res (if (equal? (car c) 'else)
                           #t
                           (eval (car c) env))))
             (if res
