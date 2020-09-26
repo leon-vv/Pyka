@@ -1,8 +1,4 @@
 
-(def-d-fun instr (ins)
-  (curry list ins))
-
-
 (def-d-fun type->string (t)
   (cond
     ((symbol? t)
@@ -22,7 +18,7 @@
     (case (car stmt)
       ((=)
         (string-append
-          (statement->string (cadr stmt))
+          "%" (symbol->string (cadr stmt))
           " = "
           (statement->string (caddr stmt))))
       
@@ -49,8 +45,20 @@
         (string-join " " (map any->string stmt))))
     (any->string stmt)))
 
+
+(def-d-fun literal? (val)
+  (not (symbol? val)))
+
+(def-d-fun +. (v1, v2)
+  (l-fun (ctx)
+    `(add i32 ,v1 ,v2)))
+
+
+#|
 (def-d-fun fun. (name args . body)
   (append (list 'fun name args) body))
+
+
  
 (def-d-fun program->string (program)
   (string-join "\n"
@@ -70,9 +78,10 @@
 (print-program
   (list
     (fun. '@main '()
-      '(ret 10))))
+      '(= x (add 10 20))
+      '(ret x))))
 
-
+|#
 
 
 
