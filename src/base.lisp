@@ -26,6 +26,10 @@
     (map print-one msgs)
     (newline)))
 
+(define string-join-map
+  (d-fun (sep fun strs)
+    (string-join sep (map fun strs))))
+
 (define error
   (d-fun msgs
     (apply print msgs)
@@ -228,7 +232,7 @@
         (if (null? clauses)
           #f
           (let* ((c (car clauses))
-                (res (if (equal? (car c) 'else)
+                (res (if (equal? c 'else)
                           #t
                           (eval (car c) env))))
             (if res
